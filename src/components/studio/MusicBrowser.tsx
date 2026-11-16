@@ -135,7 +135,7 @@ export function MusicBrowser({ library }: { library: LibraryResponse }) {
   );
 
   return (
-    <section aria-label="Music library" className="console-panel flex min-h-0 flex-col">
+    <section aria-label="Music library" className="console-panel flex min-h-0 flex-1 flex-col">
       <header className="flex flex-wrap items-center gap-2 border-b border-border p-3">
         <div className="mr-2 flex items-center gap-2">
           <Library className="h-4 w-4 text-primary" />

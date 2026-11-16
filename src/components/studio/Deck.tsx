@@ -54,7 +54,7 @@ export function Deck({ id }: { id: DeckId }) {
             : "Cued";
 
   return (
-    <section aria-label={`Deck ${id}`} className="console-panel flex min-w-0 flex-col gap-3 p-3">
+    <section aria-label={`Deck ${id}`} className="console-panel flex min-w-0 flex-col justify-between gap-3 p-3">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className={cn("rounded-sm px-1.5 py-0.5 font-display text-sm font-bold tracking-widest", accentBg, accentFg)}>

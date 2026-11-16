@@ -41,7 +41,7 @@ export function QueuePanel() {
   const total = queue.reduce((t, q) => t + q.track.duration, 0);
 
   return (
-    <aside aria-label="Running order" className="console-panel flex min-h-0 flex-col">
+    <aside aria-label="Running order" className="console-panel flex min-h-0 flex-1 flex-col">
       <header className="flex items-center justify-between gap-2 border-b border-border p-3">
         <div className="flex items-center gap-2">
           <ListMusic className="h-4 w-4 text-primary" />
