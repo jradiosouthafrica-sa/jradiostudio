@@ -54,6 +54,8 @@ type StudioActions = {
   /** Live playhead read straight from the audio element (no re-render). */
   getPosition: (deck: DeckId) => { current: number; duration: number };
   meter: (channel: MeterChannel) => number;
+  /** The program feed (decks + mic) to send to the bridge. Creates the audio engine if needed. */
+  getProgramStream: () => Promise<MediaStream>;
 };
 
 const emptyDeck: DeckState = { track: null, playing: false, loading: false, duration: 0, error: null };
@@ -289,6 +291,11 @@ export function StudioProvider({ children }: { children: ReactNode }) {
         return { current: el.currentTime, duration };
       },
       meter: (channel) => engineRef.current?.level(channel) ?? 0,
+      getProgramStream: async () => {
+        const engine = ensureEngine();
+        await engine.resume();
+        return engine.programStream;
+      },
     }),
     [ensureEngine, loadTrack, patchDeck, play, startNext],
   );
