@@ -1,4 +1,13 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useServerFn } from "@tanstack/react-start";
 import type { RemoteAudioTrack, Room } from "livekit-client";
 import { toast } from "sonner";
@@ -43,7 +52,9 @@ export function BroadcastProvider({ children }: { children: ReactNode }) {
 
   const roomRef = useRef<Room | null>(null);
   const programTrackRef = useRef<MediaStreamTrack | null>(null);
-  const audioEls = useRef(new Map<string, { track: RemoteAudioTrack; el: HTMLMediaElement; identity: string }>());
+  const audioEls = useRef(
+    new Map<string, { track: RemoteAudioTrack; el: HTMLMediaElement; identity: string }>(),
+  );
   const volRef = useRef(returnVolume);
   volRef.current = returnVolume;
   const mutedRef = useRef(mutedReturn);
@@ -67,7 +78,9 @@ export function BroadcastProvider({ children }: { children: ReactNode }) {
         name: p.name || p.identity,
         speaking: p.isSpeaking,
         quality: String(p.connectionQuality),
-        hasAudio: Array.from(p.audioTrackPublications.values()).some((t) => t.isSubscribed && !t.isMuted),
+        hasAudio: Array.from(p.audioTrackPublications.values()).some(
+          (t) => t.isSubscribed && !t.isMuted,
+        ),
       })),
     );
   }, []);
@@ -106,7 +119,11 @@ export function BroadcastProvider({ children }: { children: ReactNode }) {
           import("livekit-client"),
           getProgramStream(),
         ]);
-        const room = new Room({ adaptiveStream: false, dynacast: false, disconnectOnPageLeave: true });
+        const room = new Room({
+          adaptiveStream: false,
+          dynacast: false,
+          disconnectOnPageLeave: true,
+        });
         roomRef.current = room;
         endingRef.current = false;
 
@@ -145,7 +162,10 @@ export function BroadcastProvider({ children }: { children: ReactNode }) {
           .on(RoomEvent.Disconnected, () => {
             const unexpected = !endingRef.current;
             cleanup();
-            if (unexpected) toast.error("Lost connection to the bridge", { description: "You are off air. Press Go live to reconnect." });
+            if (unexpected)
+              toast.error("Lost connection to the bridge", {
+                description: "You are off air. Press Go live to reconnect.",
+              });
           });
 
         await room.connect(res.url, res.token, { autoSubscribe: true });
@@ -174,7 +194,10 @@ export function BroadcastProvider({ children }: { children: ReactNode }) {
         endingRef.current = true;
         await roomRef.current?.disconnect(false).catch(() => {});
         cleanup();
-        return { ok: false, message: "Couldn't connect to the bridge. Check your internet connection and try again." };
+        return {
+          ok: false,
+          message: "Couldn't connect to the bridge. Check your internet connection and try again.",
+        };
       }
     },
     [cleanup, getProgramStream, join, refreshParticipants],

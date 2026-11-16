@@ -32,9 +32,15 @@ function Strip({
       <span className={cn("console-label", labelClass)}>{label}</span>
       <div className="flex h-44 items-stretch gap-1.5">
         <Meter channel={meter} />
-        <Fader label={`${label} level`} value={levels[channel]} onChange={(v) => setLevel(channel, v)} />
+        <Fader
+          label={`${label} level`}
+          value={levels[channel]}
+          onChange={(v) => setLevel(channel, v)}
+        />
       </div>
-      <span className="font-mono text-[10px] tabular-nums text-muted-foreground">{toDb(levels[channel])} dB</span>
+      <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+        {toDb(levels[channel])} dB
+      </span>
     </div>
   );
 }
@@ -47,7 +53,7 @@ export function MixerPanel() {
     <section aria-label="Mixer" className="console-panel flex flex-col gap-3 p-3">
       <header className="flex items-center justify-between">
         <span className="console-label text-muted-foreground">Mixer</span>
-        <span className="console-label text-muted-foreground/70">Local preview</span>
+        <span className="console-label text-muted-foreground/70">Program → bridge</span>
       </header>
 
       <div className="flex justify-between gap-3 px-1">

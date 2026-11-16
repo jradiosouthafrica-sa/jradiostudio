@@ -37,7 +37,13 @@ export function QueuePanel() {
   const { queue, autoDj } = useStudio();
   const actions = useStudioActions();
   const { now, secs } = useSecondsUntilFree();
-  const starts = now ? queueStartTimes(now, secs, queue.map((q) => q.track.duration)) : [];
+  const starts = now
+    ? queueStartTimes(
+        now,
+        secs,
+        queue.map((q) => q.track.duration),
+      )
+    : [];
   const total = queue.reduce((t, q) => t + q.track.duration, 0);
 
   return (
@@ -61,7 +67,13 @@ export function QueuePanel() {
           <Button size="sm" variant="secondary" onClick={actions.playNext} disabled={!queue.length}>
             <FastForward /> Next
           </Button>
-          <Button size="sm" variant="ghost" onClick={actions.clearQueue} disabled={!queue.length} aria-label="Clear running order">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={actions.clearQueue}
+            disabled={!queue.length}
+            aria-label="Clear running order"
+          >
             <Trash2 />
           </Button>
         </div>
@@ -72,7 +84,8 @@ export function QueuePanel() {
           <div className="px-6 py-10 text-center text-sm text-muted-foreground">
             <p className="font-medium text-foreground">Nothing queued</p>
             <p className="mt-1">
-              Add tracks from the music library. With Auto DJ on, each one crossfades in as the previous track ends.
+              Add tracks from the music library. With Auto DJ on, each one crossfades in as the
+              previous track ends.
             </p>
           </div>
         ) : (

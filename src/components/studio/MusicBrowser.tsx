@@ -2,7 +2,13 @@ import { memo, useDeferredValue, useMemo, useState } from "react";
 import { AlertTriangle, ArrowUpDown, Library, Plus, Search } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { formatTime } from "@/lib/studio-logic";
 import type { DeckId, LibraryResponse, Track } from "@/lib/studio-types";
 import { cn } from "@/lib/utils";
@@ -26,7 +32,10 @@ const Row = memo(function Row({
   onQueue: (t: Track) => void;
 }) {
   return (
-    <tr className="group border-b border-border/50 hover:bg-panel-raised" onDoubleClick={() => onQueue(track)}>
+    <tr
+      className="group border-b border-border/50 hover:bg-panel-raised"
+      onDoubleClick={() => onQueue(track)}
+    >
       <td className="py-1.5 pl-3 pr-2">
         <TrackArt track={track} className="h-8 w-8" />
       </td>
@@ -34,14 +43,19 @@ const Row = memo(function Row({
         <p className="truncate text-sm font-medium">{track.title}</p>
         <p className="truncate text-xs text-muted-foreground md:hidden">{track.artist}</p>
       </td>
-      <td className="hidden max-w-0 truncate py-1.5 pr-3 text-sm text-muted-foreground md:table-cell">{track.artist}</td>
+      <td className="hidden max-w-0 truncate py-1.5 pr-3 text-sm text-muted-foreground md:table-cell">
+        {track.artist}
+      </td>
       <td className="hidden max-w-0 truncate py-1.5 pr-3 text-sm text-muted-foreground lg:table-cell">
         {track.album || "—"}
       </td>
       <td className="hidden py-1.5 pr-3 xl:table-cell">
         <div className="flex flex-wrap gap-1">
           {track.playlists.slice(0, 2).map((p) => (
-            <span key={p} className="rounded-sm bg-secondary px-1.5 py-0.5 text-[10px] text-secondary-foreground">
+            <span
+              key={p}
+              className="rounded-sm bg-secondary px-1.5 py-0.5 text-[10px] text-secondary-foreground"
+            >
               {p}
             </span>
           ))}
@@ -96,7 +110,10 @@ export function MusicBrowser({ library }: { library: LibraryResponse }) {
   const deferredQuery = useDeferredValue(query);
 
   const playlists = useMemo(
-    () => Array.from(new Set(library.tracks.flatMap((t) => t.playlists))).sort((a, b) => a.localeCompare(b)),
+    () =>
+      Array.from(new Set(library.tracks.flatMap((t) => t.playlists))).sort((a, b) =>
+        a.localeCompare(b),
+      ),
     [library.tracks],
   );
 
@@ -118,7 +135,15 @@ export function MusicBrowser({ library }: { library: LibraryResponse }) {
   const toggleSort = (key: SortKey) =>
     setSort((s) => (s.key === key ? { key, dir: s.dir === 1 ? -1 : 1 } : { key, dir: 1 }));
 
-  const SortHead = ({ k, children, className }: { k: SortKey; children: string; className?: string }) => (
+  const SortHead = ({
+    k,
+    children,
+    className,
+  }: {
+    k: SortKey;
+    children: string;
+    className?: string;
+  }) => (
     <th className={cn("py-2 pr-3 font-normal", className)}>
       <button
         type="button"
@@ -204,11 +229,15 @@ export function MusicBrowser({ library }: { library: LibraryResponse }) {
               <SortHead k="album" className="hidden lg:table-cell">
                 Album
               </SortHead>
-              <th className="console-label hidden py-2 pr-3 font-normal text-muted-foreground xl:table-cell">Playlists</th>
+              <th className="console-label hidden py-2 pr-3 font-normal text-muted-foreground xl:table-cell">
+                Playlists
+              </th>
               <SortHead k="duration" className="text-right">
                 Time
               </SortHead>
-              <th className="console-label py-2 pr-3 text-right font-normal text-muted-foreground">Load</th>
+              <th className="console-label py-2 pr-3 text-right font-normal text-muted-foreground">
+                Load
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -225,7 +254,9 @@ export function MusicBrowser({ library }: { library: LibraryResponse }) {
           </tbody>
         </table>
         {filtered.length === 0 && (
-          <p className="px-3 py-10 text-center text-sm text-muted-foreground">No tracks match your search.</p>
+          <p className="px-3 py-10 text-center text-sm text-muted-foreground">
+            No tracks match your search.
+          </p>
         )}
         {filtered.length > MAX_ROWS && (
           <p className="px-3 py-3 text-center text-xs text-muted-foreground">

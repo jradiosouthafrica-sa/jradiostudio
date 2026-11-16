@@ -54,10 +54,19 @@ export function Deck({ id }: { id: DeckId }) {
             : "Cued";
 
   return (
-    <section aria-label={`Deck ${id}`} className="console-panel flex min-w-0 flex-col justify-between gap-3 p-3">
+    <section
+      aria-label={`Deck ${id}`}
+      className="console-panel flex min-w-0 flex-col justify-between gap-3 p-3"
+    >
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className={cn("rounded-sm px-1.5 py-0.5 font-display text-sm font-bold tracking-widest", accentBg, accentFg)}>
+          <span
+            className={cn(
+              "rounded-sm px-1.5 py-0.5 font-display text-sm font-bold tracking-widest",
+              accentBg,
+              accentFg,
+            )}
+          >
             {id}
           </span>
           <span className="console-label text-muted-foreground">Deck {id}</span>
@@ -65,7 +74,9 @@ export function Deck({ id }: { id: DeckId }) {
         <span
           className={cn(
             "console-label rounded-sm border px-2 py-0.5",
-            onAir ? "border-on-air bg-on-air text-on-air-foreground" : "border-border text-muted-foreground",
+            onAir
+              ? "border-on-air bg-on-air text-on-air-foreground"
+              : "border-border text-muted-foreground",
             deck.error && "border-destructive text-destructive",
           )}
         >
@@ -83,8 +94,12 @@ export function Deck({ id }: { id: DeckId }) {
             </>
           ) : (
             <>
-              <p className="text-base font-semibold leading-tight text-muted-foreground">No track loaded</p>
-              <p className="text-sm text-muted-foreground/70">Load a track from the music library</p>
+              <p className="text-base font-semibold leading-tight text-muted-foreground">
+                No track loaded
+              </p>
+              <p className="text-sm text-muted-foreground/70">
+                Load a track from the music library
+              </p>
             </>
           )}
         </div>
@@ -143,9 +158,21 @@ export function Deck({ id }: { id: DeckId }) {
           size="sm"
           onClick={() => actions.togglePlay(id)}
           disabled={!deck.track || !!deck.error}
-          className={cn("min-w-24", accentBg, accentFg, "hover:opacity-90", id === "A" ? "hover:bg-deck-a" : "hover:bg-deck-b")}
+          className={cn(
+            "min-w-24",
+            accentBg,
+            accentFg,
+            "hover:opacity-90",
+            id === "A" ? "hover:bg-deck-a" : "hover:bg-deck-b",
+          )}
         >
-          {deck.loading && !deck.playing ? <Loader2 className="animate-spin" /> : deck.playing ? <Pause /> : <Play />}
+          {deck.loading && !deck.playing ? (
+            <Loader2 className="animate-spin" />
+          ) : deck.playing ? (
+            <Pause />
+          ) : (
+            <Play />
+          )}
           {deck.playing ? "Pause" : "Play"}
         </Button>
         <Button

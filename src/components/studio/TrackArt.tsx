@@ -15,7 +15,12 @@ export function TrackArt({ track, className }: { track: Track | null; className?
     );
   }
   return (
-    <div className={cn("flex shrink-0 items-center justify-center rounded-sm bg-groove text-muted-foreground", className)}>
+    <div
+      className={cn(
+        "flex shrink-0 items-center justify-center rounded-sm bg-groove text-muted-foreground",
+        className,
+      )}
+    >
       <Disc3 className="h-1/2 w-1/2" strokeWidth={1.5} />
     </div>
   );

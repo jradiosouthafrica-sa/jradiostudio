@@ -43,7 +43,10 @@ export function Fader({
       )}
     >
       <SliderPrimitive.Track
-        className={cn("relative grow rounded-full bg-groove", vertical ? "h-full w-1.5" : "h-1.5 w-full")}
+        className={cn(
+          "relative grow rounded-full bg-groove",
+          vertical ? "h-full w-1.5" : "h-1.5 w-full",
+        )}
       >
         <SliderPrimitive.Range className="absolute rounded-full bg-muted-foreground/30" />
       </SliderPrimitive.Track>
@@ -55,7 +58,12 @@ export function Fader({
         )}
       >
         <span
-          className={cn("absolute bg-foreground/80", vertical ? "inset-x-1 top-1/2 h-0.5 -translate-y-1/2" : "inset-y-1 left-1/2 w-0.5 -translate-x-1/2")}
+          className={cn(
+            "absolute bg-foreground/80",
+            vertical
+              ? "inset-x-1 top-1/2 h-0.5 -translate-y-1/2"
+              : "inset-y-1 left-1/2 w-0.5 -translate-x-1/2",
+          )}
         />
       </SliderPrimitive.Thumb>
     </SliderPrimitive.Root>
