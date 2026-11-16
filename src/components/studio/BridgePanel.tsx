@@ -1,7 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
 import { Headphones, Users, Volume2, VolumeX } from "lucide-react";
 
-import { bridgeStatusQueryOptions } from "@/lib/broadcast.functions";
 import { cn } from "@/lib/utils";
 import { useBroadcast } from "./broadcast-context";
 import { Fader } from "./Fader";
@@ -15,8 +13,8 @@ export function BridgePanel() {
     setReturnVolume,
     mutedReturn,
     toggleReturnMute,
+    bridge,
   } = useBroadcast();
-  const { data: bridge } = useQuery(bridgeStatusQueryOptions());
   const live = state === "live" || state === "reconnecting";
 
   return (
