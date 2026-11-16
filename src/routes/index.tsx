@@ -1,5 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useSuspenseQuery } from "@tanstack/react-query";
 
 import { BridgePanel } from "@/components/studio/BridgePanel";
 import { BroadcastProvider } from "@/components/studio/broadcast-context";
@@ -31,20 +30,23 @@ export const Route = createFileRoute("/")({
       { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
-  loader: ({ context }) =>
-    Promise.all([
+  // Loader data is serialized into the page, so server and browser render the same library.
+  loader: async ({ context }) => {
+    const [library, bridge] = await Promise.all([
       context.queryClient.ensureQueryData(libraryQueryOptions()),
       context.queryClient.ensureQueryData(bridgeStatusQueryOptions()),
-    ]),
+    ]);
+    return { library, bridge };
+  },
   component: StudioPage,
 });
 
 function StudioPage() {
-  const { data: library } = useSuspenseQuery(libraryQueryOptions());
+  const { library, bridge } = Route.useLoaderData();
 
   return (
     <StudioProvider>
-      <BroadcastProvider>
+      <BroadcastProvider bridge={bridge}>
         <div className="flex min-h-screen flex-col xl:h-screen xl:overflow-hidden">
           <StudioHeader library={library} />
           <main className="grid min-h-0 flex-1 gap-3 p-3 xl:grid-cols-[minmax(0,1fr)_340px]">

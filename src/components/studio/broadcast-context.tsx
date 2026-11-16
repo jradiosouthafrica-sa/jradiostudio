@@ -12,7 +12,7 @@ import { useServerFn } from "@tanstack/react-start";
 import type { RemoteAudioTrack, Room } from "livekit-client";
 import { toast } from "sonner";
 
-import { joinBroadcast } from "@/lib/broadcast.functions";
+import { joinBroadcast, type BridgeStatus } from "@/lib/broadcast.functions";
 import { useStudioActions } from "./studio-context";
 
 export type BridgeState = "off" | "connecting" | "live" | "reconnecting";
@@ -26,6 +26,7 @@ export type BridgeParticipant = {
 };
 
 type BroadcastValue = {
+  bridge: BridgeStatus;
   state: BridgeState;
   room: string | null;
   presenterName: string | null;
@@ -40,7 +41,7 @@ type BroadcastValue = {
 
 const Ctx = createContext<BroadcastValue | null>(null);
 
-export function BroadcastProvider({ children }: { children: ReactNode }) {
+export function BroadcastProvider({ children, bridge }: { children: ReactNode; bridge: BridgeStatus }) {
   const { getProgramStream } = useStudioActions();
   const join = useServerFn(joinBroadcast);
   const [state, setState] = useState<BridgeState>("off");
@@ -223,6 +224,7 @@ export function BroadcastProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<BroadcastValue>(
     () => ({
+      bridge,
       state,
       room: roomName,
       presenterName,
@@ -234,7 +236,7 @@ export function BroadcastProvider({ children }: { children: ReactNode }) {
       setReturnVolume: setReturnVolumeState,
       toggleReturnMute: (identity) => setMutedReturn((m) => ({ ...m, [identity]: !m[identity] })),
     }),
-    [state, roomName, presenterName, participants, returnVolume, mutedReturn, goLive, endBroadcast],
+    [bridge, state, roomName, presenterName, participants, returnVolume, mutedReturn, goLive, endBroadcast],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

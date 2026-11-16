@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Headphones, Loader2, Radio, Square } from "lucide-react";
 
 import {
@@ -23,15 +22,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { bridgeStatusQueryOptions } from "@/lib/broadcast.functions";
 import { cn } from "@/lib/utils";
 import { useBroadcast } from "./broadcast-context";
 
 const NAME_KEY = "airdesk.presenterName";
 
 export function GoLiveControl() {
-  const { state, goLive, endBroadcast } = useBroadcast();
-  const { data: bridge } = useQuery(bridgeStatusQueryOptions());
+  const { state, goLive, endBroadcast, bridge } = useBroadcast();
   const [open, setOpen] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [name, setName] = useState("");
