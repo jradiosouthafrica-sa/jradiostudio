@@ -13,7 +13,7 @@ export const DEMO_TRACKS: Track[] = DURATIONS.map((duration, i) => ({
   genre: "Electronic",
   duration,
   art: null,
-  playlists: [PLAYLISTS[i % PLAYLISTS.length]],
+  playlists: [PLAYLISTS[i % PLAYLISTS.length] ?? "Daytime"],
   path: `demo/SoundHelix-Song-${i + 1}.mp3`,
 }));
 

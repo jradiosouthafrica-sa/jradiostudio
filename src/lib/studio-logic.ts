@@ -79,16 +79,19 @@ function fileStem(path: string): string {
 /** Maps one item from AzuraCast's GET /api/station/{id}/files into a studio Track. */
 export function mapAzuraMedia(raw: unknown): Track | null {
   if (!raw || typeof raw !== "object") return null;
-  const m = raw as Record<string, unknown>;
+  const m = raw as {
+    id?: unknown; path?: unknown; title?: unknown; artist?: unknown; album?: unknown;
+    genre?: unknown; length?: unknown; art?: unknown; links?: unknown; playlists?: unknown;
+  };
   const id = typeof m.id === "number" ? m.id : Number(m.id);
   if (!Number.isSafeInteger(id) || id < 1) return null;
   const path = str(m.path);
   const length = typeof m.length === "number" ? m.length : Number(m.length);
-  const links = (m.links ?? {}) as Record<string, unknown>;
+  const links = (m.links ?? {}) as { art?: unknown };
   const art = str(m.art) || str(links.art) || null;
   const playlists = Array.isArray(m.playlists)
     ? m.playlists
-        .map((p) => (p && typeof p === "object" ? str((p as Record<string, unknown>).name) : ""))
+        .map((p) => (p && typeof p === "object" ? str((p as { name?: unknown }).name) : ""))
         .filter(Boolean)
     : [];
   return {

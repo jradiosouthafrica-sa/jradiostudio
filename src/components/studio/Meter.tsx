@@ -38,7 +38,7 @@ export function Meter({ channel, className }: { channel: MeterChannel; className
       if (kids) {
         for (let i = 0; i < kids.length; i++) {
           const seg = SEGMENTS - 1 - i; // DOM top = loudest
-          (kids[i] as HTMLElement).dataset.on = seg < lit || seg === peakSeg ? "1" : "0";
+          (kids[i] as HTMLElement).dataset["on"] = seg < lit || seg === peakSeg ? "1" : "0";
         }
       }
       raf = requestAnimationFrame(tick);

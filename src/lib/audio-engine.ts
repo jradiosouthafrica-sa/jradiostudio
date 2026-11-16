@@ -180,7 +180,7 @@ export class StudioEngine {
     a.getFloatTimeDomainData(this.buf);
     let peak = 0;
     for (let i = 0; i < this.buf.length; i++) {
-      const v = Math.abs(this.buf[i]);
+      const v = Math.abs(this.buf[i] ?? 0);
       if (v > peak) peak = v;
     }
     if (peak <= 0.0001) return 0;

@@ -260,7 +260,11 @@ export function StudioProvider({ children }: { children: ReactNode }) {
           const j = i + dir;
           if (i < 0 || j < 0 || j >= s.queue.length) return s;
           const q = [...s.queue];
-          [q[i], q[j]] = [q[j], q[i]];
+          const a = q[i];
+          const b = q[j];
+          if (!a || !b) return s;
+          q[i] = b;
+          q[j] = a;
           return { ...s, queue: q };
         }),
       clearQueue: () => setState((s) => ({ ...s, queue: [] })),
