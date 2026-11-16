@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Eject, Loader2, Pause, Play, SkipBack } from "lucide-react";
+import { Loader2, Pause, Play, SkipBack, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { END_OF_TRACK_WARNING_SECONDS, formatTime } from "@/lib/studio-logic";
@@ -154,10 +154,10 @@ export function Deck({ id }: { id: DeckId }) {
           className="ml-auto"
           onClick={() => actions.eject(id)}
           disabled={!deck.track || deck.playing}
-          aria-label={`Eject deck ${id}`}
-          title={deck.playing ? "Stop the deck before ejecting" : "Eject"}
+          aria-label={`Unload deck ${id}`}
+          title={deck.playing ? "Stop the deck before unloading" : "Unload track"}
         >
-          <Eject />
+          <X /> Unload
         </Button>
       </div>
     </section>
