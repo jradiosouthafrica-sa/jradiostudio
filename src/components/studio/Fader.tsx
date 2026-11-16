@@ -49,8 +49,7 @@ export function Fader({
       </SliderPrimitive.Track>
       <SliderPrimitive.Thumb
         className={cn(
-          "block rounded-[3px] border border-border bg-gradient-to-b from-panel-raised to-secondary shadow-md outline-none transition-[box-shadow] focus-visible:ring-2 focus-visible:ring-ring",
-          "bg-[repeating-linear-gradient(0deg,transparent_0_3px,oklch(1_0_0/6%)_3px_4px)]",
+          "fader-cap relative block rounded-[3px] border border-border shadow-md outline-none transition-[box-shadow] focus-visible:ring-2 focus-visible:ring-ring",
           vertical ? "h-9 w-8" : "h-8 w-6",
           capClassName,
         )}

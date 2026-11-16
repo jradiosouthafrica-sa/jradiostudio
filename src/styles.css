@@ -178,3 +178,8 @@
 @utility animate-eot {
   animation: eot-blink 0.8s steps(2, jump-none) infinite;
 }
+
+@utility fader-cap {
+  background-color: var(--panel-raised);
+  background-image: repeating-linear-gradient(0deg, transparent 0 3px, oklch(1 0 0 / 7%) 3px 4px);
+}

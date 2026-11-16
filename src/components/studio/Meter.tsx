@@ -58,7 +58,7 @@ export function Meter({ channel, className }: { channel: MeterChannel; className
           key={i}
           data-on="0"
           className={cn(
-            "min-h-0 flex-1 rounded-[1px] transition-opacity duration-75 data-[on=0]:bg-meter-off data-[on=0]:opacity-100",
+            "min-h-0 flex-1 rounded-[1px] transition-opacity duration-75 data-[on=0]:bg-meter-off",
             segColor(SEGMENTS - 1 - i),
           )}
         />
