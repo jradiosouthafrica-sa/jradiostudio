@@ -54,9 +54,17 @@ type StudioActions = {
   /** Live playhead read straight from the audio element (no re-render). */
   getPosition: (deck: DeckId) => { current: number; duration: number };
   meter: (channel: MeterChannel) => number;
+  /** The program feed (decks + mic) to send to the bridge. Creates the audio engine if needed. */
+  getProgramStream: () => Promise<MediaStream>;
 };
 
-const emptyDeck: DeckState = { track: null, playing: false, loading: false, duration: 0, error: null };
+const emptyDeck: DeckState = {
+  track: null,
+  playing: false,
+  loading: false,
+  duration: 0,
+  error: null,
+};
 
 const StateCtx = createContext<StudioState | null>(null);
 const ActionsCtx = createContext<StudioActions | null>(null);
@@ -137,7 +145,13 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     (deck: DeckId, track: Track) => {
       const engine = ensureEngine();
       engine.load(deck, `/api/audio/${encodeURIComponent(track.id)}`);
-      patchDeck(deck, { track, playing: false, loading: true, duration: track.duration, error: null });
+      patchDeck(deck, {
+        track,
+        playing: false,
+        loading: true,
+        duration: track.duration,
+        error: null,
+      });
     },
     [ensureEngine, patchDeck],
   );
@@ -149,7 +163,9 @@ export function StudioProvider({ children }: { children: ReactNode }) {
         await engine.play(deck);
       } catch (err) {
         console.error(err);
-        toast.error(`Deck ${deck} couldn't start`, { description: "The track may still be loading. Try again." });
+        toast.error(`Deck ${deck} couldn't start`, {
+          description: "The track may still be loading. Try again.",
+        });
       }
     },
     [ensureEngine],
@@ -177,7 +193,11 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       const snap = (deck: DeckId) => {
         const el = engine.element(deck);
         const dur = Number.isFinite(el.duration) ? el.duration : s.decks[deck].duration;
-        return { playing: !el.paused && !el.ended, remaining: dur - el.currentTime, hasTrack: !!s.decks[deck].track };
+        return {
+          playing: !el.paused && !el.ended,
+          remaining: dur - el.currentTime,
+          hasTrack: !!s.decks[deck].track,
+        };
       };
       const t = pickAutoTransition({
         autoDj: s.autoDj,
@@ -251,9 +271,12 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       setAutoDj: (on) => setState((s) => ({ ...s, autoDj: on })),
       addToQueue: (track) => {
         setState((s) => ({ ...s, queue: [...s.queue, { uid: newUid(), track }] }));
-        toast.success("Added to running order", { description: `${track.artist} — ${track.title}` });
+        toast.success("Added to running order", {
+          description: `${track.artist} — ${track.title}`,
+        });
       },
-      removeFromQueue: (uid) => setState((s) => ({ ...s, queue: s.queue.filter((q) => q.uid !== uid) })),
+      removeFromQueue: (uid) =>
+        setState((s) => ({ ...s, queue: s.queue.filter((q) => q.uid !== uid) })),
       moveInQueue: (uid, dir) =>
         setState((s) => {
           const i = s.queue.findIndex((q) => q.uid === uid);
@@ -275,7 +298,9 @@ export function StudioProvider({ children }: { children: ReactNode }) {
         const aPlaying = !engine.element("A").paused;
         const bPlaying = !engine.element("B").paused;
         if (aPlaying && bPlaying) {
-          toast.error("Both decks are on air", { description: "Stop one deck before starting the next track." });
+          toast.error("Both decks are on air", {
+            description: "Stop one deck before starting the next track.",
+          });
           return;
         }
         const from: DeckId | null = aPlaying ? "A" : bPlaying ? "B" : null;
@@ -285,10 +310,17 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       getPosition: (deck) => {
         const el = engineRef.current?.element(deck);
         if (!el) return { current: 0, duration: stateRef.current.decks[deck].duration };
-        const duration = Number.isFinite(el.duration) ? el.duration : stateRef.current.decks[deck].duration;
+        const duration = Number.isFinite(el.duration)
+          ? el.duration
+          : stateRef.current.decks[deck].duration;
         return { current: el.currentTime, duration };
       },
       meter: (channel) => engineRef.current?.level(channel) ?? 0,
+      getProgramStream: async () => {
+        const engine = ensureEngine();
+        await engine.resume();
+        return engine.programStream;
+      },
     }),
     [ensureEngine, loadTrack, patchDeck, play, startNext],
   );
