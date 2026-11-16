@@ -28,3 +28,10 @@ use the editor.
   own key and store it in Secrets.
 - **Secrets.** Lovable manages them. Do not put secret values in the repo.
 <!-- LOVABLE:END -->
+
+## Project rules
+
+- Studio audio runs in the browser (`src/lib/audio-engine.ts`, Web Audio); the mic feeds only the program bus, never the speakers, so `programStream` is the single feed to hand to the VPS mixer later.
+- AzuraCast is reached only server-side (`src/lib/azuracast.server.ts`) using the AZURACAST_BASE_URL / AZURACAST_API_KEY / AZURACAST_STATION_ID secrets; the app falls back to the demo library when they are missing or fail.
+- Track audio streams through `/api/audio/$trackId`, which accepts only ids matching `parseTrackId` so the proxy can never be pointed at arbitrary URLs.
+- Pure studio rules (crossfade curve, Auto DJ trigger, AzuraCast mapping) live in `src/lib/studio-logic.ts` with tests in `src/test/studio-logic.test.ts`.
