@@ -1,8 +1,8 @@
 import asyncio
+import base64
 import logging
 import os
 import signal
-import urllib.parse
 from dataclasses import dataclass
 
 import numpy as np
@@ -22,17 +22,11 @@ def required(name: str) -> str:
     return value
 
 
-def output_url() -> str:
-    host = required("AZURACAST_HOST")
-    port = required("AZURACAST_PORT")
+def source_mount() -> str:
     mount = required("AZURACAST_MOUNT")
-    username = required("AZURACAST_SOURCE_USERNAME")
-    password = required("AZURACAST_SOURCE_PASSWORD")
     if not mount.startswith("/"):
         mount = "/" + mount
-    user = urllib.parse.quote(username, safe="")
-    secret = urllib.parse.quote(password, safe="")
-    return f"icecast://{user}:{secret}@{host}:{port}{mount}"
+    return mount
 
 
 @dataclass
@@ -53,32 +47,87 @@ class Relay:
         self.audio_ready = asyncio.Event()
         self.ffmpeg: asyncio.subprocess.Process | None = None
         self.encoder_error_task: asyncio.Task | None = None
+        self.encoder_output_task: asyncio.Task | None = None
+        self.azuracast_writer: asyncio.StreamWriter | None = None
         self.running = True
         self.room = rtc.Room()
 
     async def start_encoder(self) -> None:
         if self.ffmpeg is not None:
             return
+
+        host = required("AZURACAST_HOST")
+        port = int(required("AZURACAST_PORT"))
+        mount = source_mount()
+        username = required("AZURACAST_SOURCE_USERNAME")
+        password = required("AZURACAST_SOURCE_PASSWORD")
+        auth = base64.b64encode(f"{username}:{password}".encode()).decode("ascii")
+
+        # FFmpeg's Icecast muxer rejects the provider's valid root mount "/".
+        # Open the Icecast SOURCE connection ourselves so that "/" is preserved.
+        LOG.info("Connecting to AzuraCast source %s:%d mount %s", host, port, mount)
+        reader, writer = await asyncio.wait_for(
+            asyncio.open_connection(host, port), timeout=12
+        )
+        request = (
+            f"SOURCE {mount} HTTP/1.0\\r\\n"
+            f"Authorization: Basic {auth}\\r\\n"
+            "Content-Type: audio/mpeg\\r\\n"
+            "User-Agent: JRadio-Relay/1.0\\r\\n"
+            "ice-name: JRadio Live\\r\\n"
+            "ice-public: 0\\r\\n"
+            "\\r\\n"
+        )
+        writer.write(request.encode("ascii"))
+        await writer.drain()
+        try:
+            response = await asyncio.wait_for(reader.readuntil(b"\\r\\n\\r\\n"), timeout=12)
+        except Exception:
+            writer.close()
+            await writer.wait_closed()
+            raise RuntimeError("AzuraCast did not return a SOURCE handshake response")
+        status = response.split(b"\\r\\n", 1)[0].decode("ascii", errors="replace")
+        if not (status.startswith("HTTP/") and (" 200 " in status or " 201 " in status)):
+            writer.close()
+            await writer.wait_closed()
+            raise RuntimeError(f"AzuraCast rejected the SOURCE connection: {status}")
+
         bitrate = os.getenv("OUTPUT_BITRATE", "128k").strip() or "128k"
-        url = output_url()
         args = [
             "ffmpeg", "-hide_banner", "-loglevel", "warning",
             "-f", "s16le", "-ar", str(RATE), "-ac", str(CHANNELS),
             "-i", "pipe:0",
             "-af", "alimiter=limit=0.95:level=false",
             "-c:a", "libmp3lame", "-b:a", bitrate,
-            "-content_type", "audio/mpeg",
-            "-ice_name", "JRadio Live",
-            "-f", "mp3", url,
+            "-f", "mp3", "pipe:1",
         ]
-        LOG.info("Starting AzuraCast output because programme audio is available")
-        self.ffmpeg = await asyncio.create_subprocess_exec(
-            *args,
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.PIPE,
-        )
+        LOG.info("AzuraCast accepted SOURCE connection; starting programme encoder")
+        try:
+            self.ffmpeg = await asyncio.create_subprocess_exec(
+                *args,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        except Exception:
+            writer.close()
+            await writer.wait_closed()
+            raise
+        self.azuracast_writer = writer
+        self.encoder_output_task = asyncio.create_task(self._forward_encoded_audio())
         self.encoder_error_task = asyncio.create_task(self._read_encoder_errors())
+
+    async def _forward_encoded_audio(self) -> None:
+        process = self.ffmpeg
+        writer = self.azuracast_writer
+        if not process or not process.stdout or not writer:
+            raise RuntimeError("AzuraCast output stream is not ready")
+        try:
+            while chunk := await process.stdout.read(8192):
+                writer.write(chunk)
+                await writer.drain()
+        except (BrokenPipeError, ConnectionResetError) as exc:
+            raise RuntimeError("AzuraCast source connection closed while streaming") from exc
 
     async def _read_encoder_errors(self) -> None:
         process = self.ffmpeg
@@ -97,6 +146,24 @@ class Relay:
             except asyncio.TimeoutError:
                 process.terminate()
                 await process.wait()
+
+        output_task, self.encoder_output_task = self.encoder_output_task, None
+        if output_task:
+            try:
+                await asyncio.wait_for(output_task, timeout=3)
+            except (asyncio.TimeoutError, Exception):
+                if not output_task.done():
+                    output_task.cancel()
+                await asyncio.gather(output_task, return_exceptions=True)
+
+        writer, self.azuracast_writer = self.azuracast_writer, None
+        if writer:
+            writer.close()
+            try:
+                await writer.wait_closed()
+            except Exception:
+                pass
+
         task, self.encoder_error_task = self.encoder_error_task, None
         if task:
             if not task.done():
