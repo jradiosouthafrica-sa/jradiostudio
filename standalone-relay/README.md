@@ -8,7 +8,7 @@ This is a separate relay service. It does not modify the JRadio Studio app, the 
 2. The relay joins the configured LiveKit room as a hidden, read-only participant.
 3. It disables automatic subscriptions and subscribes only to audio publications named `program`. It ignores all other audio/video tracks.
 4. It decodes each subscribed programme track, mixes all active programme sources into one stereo programme, applies a peak limiter, and encodes one MP3 output.
-5. FFmpeg sends that single output to the configured AzuraCast live/DJ input mount. AzuraCast then distributes one station stream to listeners.
+5. The relay opens one authenticated Icecast `SOURCE` connection to the configured AzuraCast live/DJ input mount, including a root mount of `/`. FFmpeg encodes the mixed audio to MP3 and the relay forwards it over that connection. AzuraCast then distributes one station stream to listeners.
 
 The relay is not an audio source itself. It does not publish back into LiveKit, so it cannot create a feedback loop. Private talkback or other tracks with different names are not subscribed.
 
@@ -30,7 +30,7 @@ nano .env
 
 Fill in the actual LiveKit and AzuraCast input values directly on the VPS. Keep `.env` private; do not upload it to GitHub or paste its contents into chat.
 
-`AZURACAST_MOUNT` must be the DJ/live input mount provided for the station. It is not necessarily the public listener mount. `AZURACAST_SOURCE_PASSWORD` is the DJ/live input password, not the AzuraCast API key.
+`AZURACAST_MOUNT` must be the exact DJ/live input mount provided for the station; `/` is supported. The relay uses the Icecast `SOURCE` method directly rather than FFmpeg's Icecast muxer, which rejects `/` as a mountpoint. `AZURACAST_SOURCE_PASSWORD` is the DJ/live input password, not the AzuraCast API key.
 
 ## Start and stop independently
 
