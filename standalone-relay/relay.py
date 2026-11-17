@@ -108,8 +108,6 @@ class Relay:
         if source:
             if source.task and source.task is not asyncio.current_task():
                 source.task.cancel()
-            if source.stream:
-                asyncio.create_task(source.stream.aclose())
             LOG.info("Programme source removed: %s", source.identity)
         if not self.sources:
             self.audio_ready.clear()
