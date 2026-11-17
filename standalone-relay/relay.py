@@ -70,23 +70,23 @@ class Relay:
             asyncio.open_connection(host, port), timeout=12
         )
         request = (
-            f"SOURCE {mount} HTTP/1.0\\r\\n"
-            f"Authorization: Basic {auth}\\r\\n"
-            "Content-Type: audio/mpeg\\r\\n"
-            "User-Agent: JRadio-Relay/1.0\\r\\n"
-            "ice-name: JRadio Live\\r\\n"
-            "ice-public: 0\\r\\n"
-            "\\r\\n"
+            f"SOURCE {mount} HTTP/1.0\r\n"
+            f"Authorization: Basic {auth}\r\n"
+            "Content-Type: audio/mpeg\r\n"
+            "User-Agent: JRadio-Relay/1.0\r\n"
+            "ice-name: JRadio Live\r\n"
+            "ice-public: 0\r\n"
+            "\r\n"
         )
         writer.write(request.encode("ascii"))
         await writer.drain()
         try:
-            response = await asyncio.wait_for(reader.readuntil(b"\\r\\n\\r\\n"), timeout=12)
+            response = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), timeout=12)
         except Exception:
             writer.close()
             await writer.wait_closed()
             raise RuntimeError("AzuraCast did not return a SOURCE handshake response")
-        status = response.split(b"\\r\\n", 1)[0].decode("ascii", errors="replace")
+        status = response.split(b"\r\n", 1)[0].decode("ascii", errors="replace")
         if not (status.startswith("HTTP/") and (" 200 " in status or " 201 " in status)):
             writer.close()
             await writer.wait_closed()
@@ -149,12 +149,12 @@ class Relay:
 
         output_task, self.encoder_output_task = self.encoder_output_task, None
         if output_task:
-            try:
-                await asyncio.wait_for(output_task, timeout=3)
-            except (asyncio.TimeoutError, Exception):
-                if not output_task.done():
+            if not output_task.done():
+                try:
+                    await asyncio.wait_for(output_task, timeout=3)
+                except asyncio.TimeoutError:
                     output_task.cancel()
-                await asyncio.gather(output_task, return_exceptions=True)
+            await asyncio.gather(output_task, return_exceptions=True)
 
         writer, self.azuracast_writer = self.azuracast_writer, None
         if writer:
