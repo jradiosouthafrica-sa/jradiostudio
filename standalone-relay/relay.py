@@ -13,7 +13,6 @@ RATE = 48_000
 CHANNELS = 2
 FRAME_MS = 20
 SAMPLES_PER_CHANNEL = RATE * FRAME_MS // 1000
-FRAME_BYTES = SAMPLES_PER_CHANNEL * CHANNELS * 2
 
 
 def required(name: str) -> str:
@@ -27,7 +26,7 @@ def output_url() -> str:
     host = required("AZURACAST_HOST")
     port = required("AZURACAST_PORT")
     mount = required("AZURACAST_MOUNT")
-    username = os.getenv("AZURACAST_SOURCE_USERNAME", "source").strip() or "source"
+    username = required("AZURACAST_SOURCE_USERNAME")
     password = required("AZURACAST_SOURCE_PASSWORD")
     if not mount.startswith("/"):
         mount = "/" + mount
@@ -51,11 +50,15 @@ class Relay:
         self.track_name = os.getenv("PROGRAM_TRACK_NAME", "program").strip() or "program"
         self.identity = os.getenv("RELAY_IDENTITY", "jradio-azuracast-relay").strip()
         self.sources: dict[str, Source] = {}
+        self.audio_ready = asyncio.Event()
         self.ffmpeg: asyncio.subprocess.Process | None = None
+        self.encoder_error_task: asyncio.Task | None = None
         self.running = True
         self.room = rtc.Room()
 
     async def start_encoder(self) -> None:
+        if self.ffmpeg is not None:
+            return
         bitrate = os.getenv("OUTPUT_BITRATE", "128k").strip() or "128k"
         url = output_url()
         args = [
@@ -68,20 +71,48 @@ class Relay:
             "-ice_name", "JRadio Live",
             "-f", "mp3", url,
         ]
-        LOG.info("Starting one MP3 output to AzuraCast mount %s", os.getenv("AZURACAST_MOUNT"))
+        LOG.info("Starting AzuraCast output because programme audio is available")
         self.ffmpeg = await asyncio.create_subprocess_exec(
             *args,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.PIPE,
         )
-        asyncio.create_task(self._read_encoder_errors())
+        self.encoder_error_task = asyncio.create_task(self._read_encoder_errors())
 
     async def _read_encoder_errors(self) -> None:
-        if not self.ffmpeg or not self.ffmpeg.stderr:
+        process = self.ffmpeg
+        if not process or not process.stderr:
             return
-        while line := await self.ffmpeg.stderr.readline():
+        while line := await process.stderr.readline():
             LOG.warning("FFmpeg: %s", line.decode(errors="replace").rstrip())
+
+    async def stop_encoder(self) -> None:
+        process, self.ffmpeg = self.ffmpeg, None
+        if process and process.returncode is None:
+            if process.stdin:
+                process.stdin.close()
+            try:
+                await asyncio.wait_for(process.wait(), timeout=8)
+            except asyncio.TimeoutError:
+                process.terminate()
+                await process.wait()
+        task, self.encoder_error_task = self.encoder_error_task, None
+        if task:
+            if not task.done():
+                task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+    def _remove_source(self, key_id: str) -> None:
+        source = self.sources.pop(key_id, None)
+        if source:
+            if source.task and source.task is not asyncio.current_task():
+                source.task.cancel()
+            if source.stream:
+                asyncio.create_task(source.stream.aclose())
+            LOG.info("Programme source removed: %s", source.identity)
+        if not self.sources:
+            self.audio_ready.clear()
 
     async def connect(self) -> None:
         url = required("LIVEKIT_URL")
@@ -133,22 +164,17 @@ class Relay:
                 capacity=3,
             )
             source.task = asyncio.create_task(self._read_source(key_id, source))
-            LOG.info("Programme source active: %s (%s)", participant.identity, publication.sid)
+            LOG.info("Programme source subscribed: %s (%s)", participant.identity, publication.sid)
 
         @self.room.on("track_unsubscribed")
         def on_track_unsubscribed(track: rtc.Track, publication: rtc.RemoteTrackPublication, participant: rtc.RemoteParticipant):
-            key_id = f"{participant.identity}:{publication.sid}"
-            source = self.sources.pop(key_id, None)
-            if source:
-                if source.task:
-                    source.task.cancel()
-                LOG.info("Programme source removed: %s", participant.identity)
+            self._remove_source(f"{participant.identity}:{publication.sid}")
 
         await self.room.connect(url, token, rtc.RoomOptions(auto_subscribe=False))
         LOG.info("Connected to LiveKit room %s as read-only relay", self.room_name)
 
-        # Subscribe only to the app's combined local programme tracks.
-        # Other audio tracks (including future private/talkback tracks) are ignored.
+        # Only the studio app's combined programme tracks are subscribed.
+        # Private/talkback tracks with other names are ignored.
         for participant in self.room.remote_participants.values():
             for publication in participant.track_publications.values():
                 if publication.kind == rtc.TrackKind.KIND_AUDIO and publication.name == self.track_name:
@@ -176,6 +202,7 @@ class Relay:
                     except asyncio.QueueEmpty:
                         pass
                     source.queue.put_nowait(samples)
+                self.audio_ready.set()
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -183,19 +210,31 @@ class Relay:
         finally:
             if source.stream:
                 await source.stream.aclose()
+            if self.sources.get(key_id) is source:
+                self.sources.pop(key_id, None)
+                LOG.info("Programme reader ended: %s", source.identity)
+            if not self.sources:
+                self.audio_ready.clear()
+
+    async def wait_for_audio(self) -> bool:
+        while self.running:
+            if any(not source.queue.empty() for source in self.sources.values()):
+                return True
+            self.audio_ready.clear()
+            try:
+                await asyncio.wait_for(self.audio_ready.wait(), timeout=1)
+            except asyncio.TimeoutError:
+                pass
+        return False
 
     async def mix_to_azuracast(self) -> None:
-        LOG.info("Mixer running: %d Hz, stereo, %d ms frames", RATE, FRAME_MS)
-        silence = np.zeros((SAMPLES_PER_CHANNEL, CHANNELS), dtype=np.int16)
+        LOG.info("Programme mixer active: %d Hz, stereo, %d ms frames", RATE, FRAME_MS)
         frame_seconds = FRAME_MS / 1000
-        while self.running:
+        while self.running and self.sources:
             started = asyncio.get_running_loop().time()
             active = list(self.sources.values())
             mixed = np.zeros((SAMPLES_PER_CHANNEL, CHANNELS), dtype=np.int32)
             for source in active:
-                # Consume at most one 20 ms frame per source per output tick.
-                # Draining the whole queue here would discard valid audio frames
-                # and cause systematic gaps/dropouts.
                 try:
                     frame = source.queue.get_nowait()
                 except asyncio.QueueEmpty:
@@ -204,50 +243,49 @@ class Relay:
                     mixed += frame.astype(np.int32)
 
             peak = int(np.max(np.abs(mixed))) if mixed.size else 0
-            # A simple peak limiter prevents clipping when multiple presenters overlap.
             ceiling = 29_200
             if peak > ceiling:
                 mixed = (mixed.astype(np.float64) * (ceiling / peak)).astype(np.int32)
-            output = np.clip(mixed, -32768, 32767).astype(np.int16) if active else silence
-            if self.ffmpeg is None:
+            output = np.clip(mixed, -32768, 32767).astype(np.int16)
+
+            process = self.ffmpeg
+            if process is None:
                 raise RuntimeError("FFmpeg encoder was not started")
-            if self.ffmpeg.returncode is not None:
-                raise RuntimeError(
-                    f"FFmpeg/AzuraCast output exited with code {self.ffmpeg.returncode}"
-                )
-            if self.ffmpeg.stdin is None:
+            if process.returncode is not None:
+                raise RuntimeError(f"FFmpeg/AzuraCast output exited with code {process.returncode}")
+            if process.stdin is None:
                 raise RuntimeError("FFmpeg encoder input pipe is unavailable")
-            self.ffmpeg.stdin.write(output.tobytes())
+            process.stdin.write(output.tobytes())
             try:
-                await self.ffmpeg.stdin.drain()
+                await process.stdin.drain()
             except (BrokenPipeError, ConnectionResetError):
-                raise RuntimeError("FFmpeg/AzuraCast output closed; relay stopped to avoid silent failure")
+                raise RuntimeError("FFmpeg/AzuraCast output closed; relay stopped")
             elapsed = asyncio.get_running_loop().time() - started
             await asyncio.sleep(max(0.0, frame_seconds - elapsed))
 
+        LOG.info("No programme sources remain; closing AzuraCast input so station AutoDJ can resume")
+
     async def run(self) -> None:
-        await self.start_encoder()
+        # Connect to LiveKit first. Never claim the AzuraCast mount with silence.
         await self.connect()
-        await self.mix_to_azuracast()
+        while self.running:
+            if not await self.wait_for_audio():
+                break
+            if not self.sources:
+                continue
+            await self.start_encoder()
+            await self.mix_to_azuracast()
+            await self.stop_encoder()
 
     async def close(self) -> None:
         self.running = False
-        for source in list(self.sources.values()):
-            if source.task:
-                source.task.cancel()
-            if source.stream:
-                await source.stream.aclose()
+        self.audio_ready.set()
+        for key_id in list(self.sources):
+            self._remove_source(key_id)
         self.sources.clear()
         if self.room.isconnected():
             await self.room.disconnect()
-        if self.ffmpeg and self.ffmpeg.returncode is None:
-            if self.ffmpeg.stdin:
-                self.ffmpeg.stdin.close()
-            try:
-                await asyncio.wait_for(self.ffmpeg.wait(), timeout=8)
-            except asyncio.TimeoutError:
-                self.ffmpeg.terminate()
-                await self.ffmpeg.wait()
+        await self.stop_encoder()
 
 
 async def main() -> None:
