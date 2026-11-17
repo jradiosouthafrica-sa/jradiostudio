@@ -295,17 +295,43 @@ class Relay:
     async def mix_to_azuracast(self) -> None:
         LOG.info("Programme mixer active: %d Hz, stereo, %d ms frames", RATE, FRAME_MS)
         frame_seconds = FRAME_MS / 1000
-        while self.running and self.sources:
-            started = asyncio.get_running_loop().time()
+        grace_seconds = max(0.0, float(os.getenv("SOURCE_LOSS_GRACE_SECONDS", "30")))
+        no_source_since: float | None = None
+        loop = asyncio.get_running_loop()
+
+        # Keep the same AzuraCast SOURCE session alive through brief LiveKit
+        # track handoffs. During the grace window, send silence rather than
+        # disconnecting and triggering AutoDJ/live-source switching.
+        while self.running:
+            started = loop.time()
             active = list(self.sources.values())
             mixed = np.zeros((SAMPLES_PER_CHANNEL, CHANNELS), dtype=np.int32)
-            for source in active:
-                try:
-                    frame = source.queue.get_nowait()
-                except asyncio.QueueEmpty:
-                    frame = None
-                if frame is not None:
-                    mixed += frame.astype(np.int32)
+
+            if not active:
+                if no_source_since is None:
+                    no_source_since = started
+                    LOG.warning(
+                        "No programme sources remain; holding AzuraCast input for %.1f seconds before AutoDJ handoff",
+                        grace_seconds,
+                    )
+                if started - no_source_since >= grace_seconds:
+                    LOG.info(
+                        "Programme source grace period expired; closing AzuraCast input so station AutoDJ can resume"
+                    )
+                    break
+            else:
+                if no_source_since is not None:
+                    LOG.info(
+                        "Programme source returned within grace period; continuing the existing AzuraCast input"
+                    )
+                    no_source_since = None
+                for source in active:
+                    try:
+                        frame = source.queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        frame = None
+                    if frame is not None:
+                        mixed += frame.astype(np.int32)
 
             peak = int(np.max(np.abs(mixed))) if mixed.size else 0
             ceiling = 29_200
@@ -325,10 +351,8 @@ class Relay:
                 await process.stdin.drain()
             except (BrokenPipeError, ConnectionResetError):
                 raise RuntimeError("FFmpeg/AzuraCast output closed; relay stopped")
-            elapsed = asyncio.get_running_loop().time() - started
+            elapsed = loop.time() - started
             await asyncio.sleep(max(0.0, frame_seconds - elapsed))
-
-        LOG.info("No programme sources remain; closing AzuraCast input so station AutoDJ can resume")
 
     async def run(self) -> None:
         # Connect to LiveKit first. Never claim the AzuraCast mount with silence.
