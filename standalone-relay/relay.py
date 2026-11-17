@@ -122,14 +122,15 @@ class Relay:
             source = Source(
                 identity=participant.identity,
                 track_name=publication.name,
-                queue=asyncio.Queue(maxsize=8),
+                queue=asyncio.Queue(maxsize=3),
             )
             self.sources[key_id] = source
             source.stream = rtc.AudioStream.from_track(
                 track=track,
                 sample_rate=RATE,
                 num_channels=CHANNELS,
-                capacity=8,
+                frame_size_ms=FRAME_MS,
+                capacity=3,
             )
             source.task = asyncio.create_task(self._read_source(key_id, source))
             LOG.info("Programme source active: %s (%s)", participant.identity, publication.sid)
@@ -192,14 +193,15 @@ class Relay:
             active = list(self.sources.values())
             mixed = np.zeros((SAMPLES_PER_CHANNEL, CHANNELS), dtype=np.int32)
             for source in active:
-                latest = None
-                while True:
-                    try:
-                        latest = source.queue.get_nowait()
-                    except asyncio.QueueEmpty:
-                        break
-                if latest is not None:
-                    mixed += latest.astype(np.int32)
+                # Consume at most one 20 ms frame per source per output tick.
+                # Draining the whole queue here would discard valid audio frames
+                # and cause systematic gaps/dropouts.
+                try:
+                    frame = source.queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    frame = None
+                if frame is not None:
+                    mixed += frame.astype(np.int32)
 
             peak = int(np.max(np.abs(mixed))) if mixed.size else 0
             # A simple peak limiter prevents clipping when multiple presenters overlap.
@@ -207,12 +209,19 @@ class Relay:
             if peak > ceiling:
                 mixed = (mixed.astype(np.float64) * (ceiling / peak)).astype(np.int32)
             output = np.clip(mixed, -32768, 32767).astype(np.int16) if active else silence
-            if self.ffmpeg and self.ffmpeg.stdin and self.ffmpeg.returncode is None:
-                self.ffmpeg.stdin.write(output.tobytes())
-                try:
-                    await self.ffmpeg.stdin.drain()
-                except (BrokenPipeError, ConnectionResetError):
-                    raise RuntimeError("FFmpeg/AzuraCast output closed; relay stopped to avoid silent failure")
+            if self.ffmpeg is None:
+                raise RuntimeError("FFmpeg encoder was not started")
+            if self.ffmpeg.returncode is not None:
+                raise RuntimeError(
+                    f"FFmpeg/AzuraCast output exited with code {self.ffmpeg.returncode}"
+                )
+            if self.ffmpeg.stdin is None:
+                raise RuntimeError("FFmpeg encoder input pipe is unavailable")
+            self.ffmpeg.stdin.write(output.tobytes())
+            try:
+                await self.ffmpeg.stdin.drain()
+            except (BrokenPipeError, ConnectionResetError):
+                raise RuntimeError("FFmpeg/AzuraCast output closed; relay stopped to avoid silent failure")
             elapsed = asyncio.get_running_loop().time() - started
             await asyncio.sleep(max(0.0, frame_seconds - elapsed))
 
