@@ -395,15 +395,26 @@ class Relay:
             await asyncio.sleep(max(0.0, frame_seconds - elapsed))
 
     async def run(self) -> None:
-        # Connect to LiveKit first. Never claim the AzuraCast mount with silence.
+        # Keep the LiveKit subscription alive even if AzuraCast drops a SOURCE
+        # connection. A transient Icecast reset must not tear down the relay.
         await self.connect()
         while self.running:
             if not await self.wait_for_audio():
                 break
             if not self.sources:
                 continue
-            await self.start_encoder()
-            await self.mix_to_azuracast()
+            try:
+                await self.start_encoder()
+                await self.mix_to_azuracast()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                LOG.exception(
+                    "Relay output session failed; keeping LiveKit connected and retrying AzuraCast in 3 seconds"
+                )
+                await self.stop_encoder()
+                await asyncio.sleep(3)
+                continue
             await self.stop_encoder()
 
     async def close(self) -> None:
