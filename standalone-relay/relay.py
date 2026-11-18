@@ -316,7 +316,7 @@ class Relay:
     async def mix_to_azuracast(self) -> None:
         LOG.info("Programme mixer active: %d Hz, stereo, %d ms frames", RATE, FRAME_MS)
         frame_seconds = FRAME_MS / 1000
-        grace_seconds = max(0.0, float(os.getenv("SOURCE_LOSS_GRACE_SECONDS", "30")))
+        grace_seconds = max(0.0, float(os.getenv("SOURCE_LOSS_GRACE_SECONDS", "120")))
         no_source_since: float | None = None
         loop = asyncio.get_running_loop()
         mix_frames = 0
