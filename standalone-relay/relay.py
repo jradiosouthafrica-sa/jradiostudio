@@ -36,6 +36,8 @@ class Source:
     queue: asyncio.Queue
     task: asyncio.Task | None = None
     stream: rtc.AudioStream | None = None
+    frames_received: int = 0
+    last_peak: int = 0
 
 
 class Relay:
@@ -49,6 +51,7 @@ class Relay:
         self.encoder_error_task: asyncio.Task | None = None
         self.encoder_output_task: asyncio.Task | None = None
         self.azuracast_writer: asyncio.StreamWriter | None = None
+        self.encoded_bytes_forwarded = 0
         self.running = True
         self.room = rtc.Room()
 
@@ -122,10 +125,19 @@ class Relay:
         writer = self.azuracast_writer
         if not process or not process.stdout or not writer:
             raise RuntimeError("AzuraCast output stream is not ready")
+        last_log = asyncio.get_running_loop().time()
         try:
             while chunk := await process.stdout.read(8192):
                 writer.write(chunk)
                 await writer.drain()
+                self.encoded_bytes_forwarded += len(chunk)
+                now = asyncio.get_running_loop().time()
+                if now - last_log >= 5:
+                    LOG.info(
+                        "AzuraCast output forwarding: %d encoded bytes sent",
+                        self.encoded_bytes_forwarded,
+                    )
+                    last_log = now
         except (BrokenPipeError, ConnectionResetError) as exc:
             raise RuntimeError("AzuraCast source connection closed while streaming") from exc
 
@@ -253,6 +265,15 @@ class Relay:
                 if samples.size % CHANNELS:
                     samples = samples[: samples.size - (samples.size % CHANNELS)]
                 samples = samples.reshape((-1, CHANNELS))
+                source.frames_received += 1
+                source.last_peak = int(np.max(np.abs(samples))) if samples.size else 0
+                if source.frames_received % 250 == 0:
+                    LOG.info(
+                        "LiveKit audio received from %s: %d frames, latest peak %d/32768",
+                        source.identity,
+                        source.frames_received,
+                        source.last_peak,
+                    )
                 if samples.shape[0] < SAMPLES_PER_CHANNEL:
                     padded = np.zeros((SAMPLES_PER_CHANNEL, CHANNELS), dtype=np.int16)
                     padded[: samples.shape[0]] = samples
@@ -298,6 +319,8 @@ class Relay:
         grace_seconds = max(0.0, float(os.getenv("SOURCE_LOSS_GRACE_SECONDS", "30")))
         no_source_since: float | None = None
         loop = asyncio.get_running_loop()
+        mix_frames = 0
+        last_mix_log = loop.time()
 
         # Keep the same AzuraCast SOURCE session alive through brief LiveKit
         # track handoffs. During the grace window, send silence rather than
@@ -334,6 +357,23 @@ class Relay:
                         mixed += frame.astype(np.int32)
 
             peak = int(np.max(np.abs(mixed))) if mixed.size else 0
+            mix_frames += 1
+            if loop.time() - last_mix_log >= 5:
+                LOG.info(
+                    "Programme mix level: sources=%d, peak=%d/32768, frames=%d",
+                    len(active),
+                    peak,
+                    mix_frames,
+                )
+                last_mix_log = loop.time()
+
+            output_task = self.encoder_output_task
+            if output_task and output_task.done():
+                error = output_task.exception()
+                if error:
+                    raise RuntimeError(f"AzuraCast output forwarding failed: {error}") from error
+                raise RuntimeError("AzuraCast output forwarding stopped unexpectedly")
+
             ceiling = 29_200
             if peak > ceiling:
                 mixed = (mixed.astype(np.float64) * (ceiling / peak)).astype(np.int32)
