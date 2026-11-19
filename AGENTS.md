@@ -36,3 +36,4 @@ use the editor.
 - AzuraCast is reached only server-side (`src/lib/azuracast.server.ts`) using the AZURACAST_BASE_URL / AZURACAST_API_KEY / AZURACAST_STATION_ID secrets; the app falls back to the demo library when they are missing or fail.
 - Track audio streams through `/api/audio/$trackId`, which accepts only ids matching `parseTrackId` so the proxy can never be pointed at arbitrary URLs.
 - Pure studio rules (crossfade curve, Auto DJ trigger, AzuraCast mapping) live in `src/lib/studio-logic.ts` with tests in `src/test/studio-logic.test.ts`.
+- Public on-air audio goes browser → AzuraCast Web DJ WebSocket (`src/lib/azura-webcaster.ts`, Liquidsoap "webcast" protocol); the DJ login is released only after the studio password check in `getAzuraLiveLogin`, because VPS relays proved unreliable.

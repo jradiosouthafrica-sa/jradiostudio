@@ -5,6 +5,7 @@ import type { LibraryResponse } from "@/lib/studio-types";
 import { cn } from "@/lib/utils";
 import { useBroadcast } from "./broadcast-context";
 import { GoLiveControl } from "./GoLiveControl";
+import { AzuraLiveControl } from "./AzuraLiveControl";
 import { useStudio } from "./studio-context";
 
 function Clock() {
@@ -81,6 +82,7 @@ export function StudioHeader({ library }: { library: LibraryResponse }) {
         {lamp}
       </div>
       <GoLiveControl />
+      <AzuraLiveControl />
 
       <div className="ml-auto flex flex-wrap items-center gap-2">
         <StatusChip
