@@ -31,9 +31,10 @@ use the editor.
 
 ## Project rules
 
-- Studio audio runs in the browser (`src/lib/audio-engine.ts`, Web Audio); the mic feeds only the program bus, never the speakers, so `programStream` is the single feed published to the bridge.
-- Live broadcasting goes through the VPS LiveKit server: `joinBroadcast` checks STUDIO_PASSWORD and signs a short-lived presenter token server-side (LIVEKIT_API_KEY/SECRET never reach the browser); the client publishes `programStream` and plays remote tracks as monitor-only return audio, never into the program bus (avoids re-broadcasting co-hosts).
 - AzuraCast is reached only server-side (`src/lib/azuracast.server.ts`) using the AZURACAST_BASE_URL / AZURACAST_API_KEY / AZURACAST_STATION_ID secrets; the app falls back to the demo library when they are missing or fail.
 - Track audio streams through `/api/audio/$trackId`, which accepts only ids matching `parseTrackId` so the proxy can never be pointed at arbitrary URLs.
 - Pure studio rules (crossfade curve, Auto DJ trigger, AzuraCast mapping) live in `src/lib/studio-logic.ts` with tests in `src/test/studio-logic.test.ts`.
 - Public on-air audio goes browser → AzuraCast Web DJ WebSocket (`src/lib/azura-webcaster.ts`, Liquidsoap "webcast" protocol); the DJ login is released only after the studio password check in `getAzuraLiveLogin`, because VPS relays proved unreliable.
+
+- Studio audio runs in the browser (`src/lib/audio-engine.ts`, Web Audio); the mic feeds only the program bus, never the speakers, so `programStream` is the single feed sent to AzuraCast.
+- The on-air lamp turns live only after AzuraCast now-playing reports `is_live` (`getAzuraOnAir`), because an open WebSocket alone does not mean listeners hear the studio.

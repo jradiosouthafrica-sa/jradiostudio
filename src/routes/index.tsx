@@ -1,14 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { BridgePanel } from "@/components/studio/BridgePanel";
-import { BroadcastProvider } from "@/components/studio/broadcast-context";
 import { Deck } from "@/components/studio/Deck";
 import { MixerPanel } from "@/components/studio/MixerPanel";
 import { MusicBrowser } from "@/components/studio/MusicBrowser";
 import { QueuePanel } from "@/components/studio/QueuePanel";
 import { StudioHeader } from "@/components/studio/StudioHeader";
 import { StudioProvider } from "@/components/studio/studio-context";
-import { bridgeStatusQueryOptions } from "@/lib/broadcast.functions";
 import { libraryQueryOptions } from "@/lib/library.functions";
 
 export const Route = createFileRoute("/")({
@@ -32,21 +29,17 @@ export const Route = createFileRoute("/")({
   }),
   // Loader data is serialized into the page, so server and browser render the same library.
   loader: async ({ context }) => {
-    const [library, bridge] = await Promise.all([
-      context.queryClient.ensureQueryData(libraryQueryOptions()),
-      context.queryClient.ensureQueryData(bridgeStatusQueryOptions()),
-    ]);
-    return { library, bridge };
+    const library = await context.queryClient.ensureQueryData(libraryQueryOptions());
+    return { library };
   },
   component: StudioPage,
 });
 
 function StudioPage() {
-  const { library, bridge } = Route.useLoaderData();
+  const { library } = Route.useLoaderData();
 
   return (
     <StudioProvider>
-      <BroadcastProvider bridge={bridge}>
         <div className="flex min-h-screen flex-col xl:h-screen xl:overflow-hidden">
           <StudioHeader library={library} />
           <main className="grid min-h-0 flex-1 gap-3 p-3 xl:grid-cols-[minmax(0,1fr)_340px]">
@@ -61,12 +54,10 @@ function StudioPage() {
               </div>
             </div>
             <div className="flex min-h-[360px] flex-col gap-3 xl:min-h-0">
-              <BridgePanel />
               <QueuePanel />
             </div>
           </main>
         </div>
-      </BroadcastProvider>
     </StudioProvider>
   );
 }

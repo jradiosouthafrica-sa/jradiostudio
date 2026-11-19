@@ -3,10 +3,7 @@ import { Radio } from "lucide-react";
 
 import type { LibraryResponse } from "@/lib/studio-types";
 import { cn } from "@/lib/utils";
-import { useBroadcast } from "./broadcast-context";
-import { GoLiveControl } from "./GoLiveControl";
 import { AzuraLiveControl } from "./AzuraLiveControl";
-import { useStudio } from "./studio-context";
 
 function Clock() {
   const [now, setNow] = useState<Date | null>(null);
@@ -39,17 +36,6 @@ function StatusChip({ ok, label, value }: { ok: boolean; label: string; value: s
 }
 
 export function StudioHeader({ library }: { library: LibraryResponse }) {
-  const { micOpen } = useStudio();
-  const { state } = useBroadcast();
-  const onAir = state === "live" || state === "reconnecting";
-  const lamp = onAir
-    ? micOpen
-      ? "On air · mic live"
-      : "On air"
-    : micOpen
-      ? "Mic open · off air"
-      : "Off air";
-
   return (
     <header className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-border bg-panel px-4 py-2.5">
       <div className="flex items-center gap-2.5">
@@ -62,26 +48,6 @@ export function StudioHeader({ library }: { library: LibraryResponse }) {
         </div>
       </div>
 
-      <div
-        className={cn(
-          "flex items-center gap-2 rounded-md border px-3 py-1.5 font-display text-sm font-bold uppercase tracking-[0.2em] transition-colors",
-          onAir
-            ? "glow-on-air border-on-air bg-on-air text-on-air-foreground"
-            : micOpen
-              ? "border-on-air/60 text-on-air"
-              : "border-border text-muted-foreground",
-        )}
-        aria-live="polite"
-      >
-        <span
-          className={cn(
-            "h-2 w-2 rounded-full",
-            onAir ? "bg-on-air-foreground" : micOpen ? "bg-on-air" : "bg-meter-off",
-          )}
-        />
-        {lamp}
-      </div>
-      <GoLiveControl />
       <AzuraLiveControl />
 
       <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -89,19 +55,6 @@ export function StudioHeader({ library }: { library: LibraryResponse }) {
           ok={library.mode === "live"}
           label="AzuraCast"
           value={library.mode === "live" ? `${library.tracks.length} tracks` : "Demo library"}
-        />
-        <StatusChip
-          ok={onAir}
-          label="Bridge"
-          value={
-            state === "live"
-              ? "Connected"
-              : state === "reconnecting"
-                ? "Reconnecting"
-                : state === "connecting"
-                  ? "Connecting"
-                  : "Off air"
-          }
         />
         <Clock />
       </div>
