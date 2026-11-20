@@ -47,6 +47,8 @@ type StudioActions = {
   setDuck: (on: boolean) => void;
   setAutoDj: (on: boolean) => void;
   addToQueue: (track: Track) => void;
+  /** Adds several tracks at once, keeping their order (select all / whole folder). */
+  addManyToQueue: (tracks: Track[], label?: string) => void;
   removeFromQueue: (uid: string) => void;
   moveInQueue: (uid: string, dir: -1 | 1) => void;
   clearQueue: () => void;
@@ -87,6 +89,8 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   stateRef.current = state;
   const engineRef = useRef<StudioEngine | null>(null);
   const fadeRaf = useRef<number | null>(null);
+  /** Guards the gap between Auto DJ firing and the next deck actually starting. */
+  const pendingRef = useRef(false);
 
   const patchDeck = useCallback((deck: DeckId, patch: Partial<DeckState>) => {
     setState((s) => ({ ...s, decks: { ...s.decks, [deck]: { ...s.decks[deck], ...patch } } }));
@@ -171,17 +175,29 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     [ensureEngine],
   );
 
+  /** Starts the deck and crossfades over to it. */
+  const fadeInto = useCallback(
+    (to: DeckId, fadeSeconds: number) => {
+      pendingRef.current = true;
+      void play(to).finally(() => {
+        pendingRef.current = false;
+        if (engineRef.current && !engineRef.current.element(to).paused) {
+          animateCrossfader(to === "A" ? -1 : 1, fadeSeconds);
+        }
+      });
+    },
+    [animateCrossfader, play],
+  );
+
   const startNext = useCallback(
     (to: DeckId, fadeSeconds: number) => {
       const [next, ...rest] = stateRef.current.queue;
       if (!next) return;
       setState((s) => ({ ...s, queue: rest }));
       loadTrack(to, next.track);
-      void play(to).then(() => {
-        animateCrossfader(to === "A" ? -1 : 1, fadeSeconds);
-      });
+      fadeInto(to, fadeSeconds);
     },
-    [animateCrossfader, loadTrack, play],
+    [fadeInto, loadTrack],
   );
 
   // Auto DJ: watch the playing deck and crossfade into the next queued track.
@@ -189,7 +205,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     const id = window.setInterval(() => {
       const engine = engineRef.current;
       const s = stateRef.current;
-      if (!engine) return;
+      if (!engine || pendingRef.current) return;
       const snap = (deck: DeckId) => {
         const el = engine.element(deck);
         const dur = Number.isFinite(el.duration) ? el.duration : s.decks[deck].duration;
@@ -197,6 +213,12 @@ export function StudioProvider({ children }: { children: ReactNode }) {
           playing: !el.paused && !el.ended,
           remaining: dur - el.currentTime,
           hasTrack: !!s.decks[deck].track,
+          cued:
+            !!s.decks[deck].track &&
+            !s.decks[deck].error &&
+            el.paused &&
+            !el.ended &&
+            el.currentTime < 1,
         };
       };
       const t = pickAutoTransition({
@@ -206,11 +228,12 @@ export function StudioProvider({ children }: { children: ReactNode }) {
         decks: { A: snap("A"), B: snap("B") },
       });
       if (!t) return;
-      const remaining = snap(t.from).remaining;
-      startNext(t.to, Math.max(1, Math.min(AUTO_CROSSFADE_SECONDS, remaining)));
+      const fade = Math.max(1, Math.min(AUTO_CROSSFADE_SECONDS, snap(t.from).remaining));
+      if (t.source === "deck") fadeInto(t.to, fade);
+      else startNext(t.to, fade);
     }, 250);
     return () => window.clearInterval(id);
-  }, [startNext]);
+  }, [fadeInto, startNext]);
 
   useEffect(() => () => stopFade(), []);
 
@@ -274,6 +297,17 @@ export function StudioProvider({ children }: { children: ReactNode }) {
         toast.success("Added to running order", {
           description: `${track.artist} — ${track.title}`,
         });
+      },
+      addManyToQueue: (tracks, label) => {
+        if (!tracks.length) return;
+        setState((s) => ({
+          ...s,
+          queue: [...s.queue, ...tracks.map((track) => ({ uid: newUid(), track }))],
+        }));
+        toast.success(
+          `Added ${tracks.length} ${tracks.length === 1 ? "track" : "tracks"} to running order`,
+          label ? { description: label } : undefined,
+        );
       },
       removeFromQueue: (uid) =>
         setState((s) => ({ ...s, queue: s.queue.filter((q) => q.uid !== uid) })),

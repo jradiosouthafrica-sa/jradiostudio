@@ -2,7 +2,7 @@
 
 - [x] Presenter studio: DJ console layout (2 decks, mixer, mic, crossfader, running order with Auto DJ)
 - [x] AzuraCast music browser (search, playlist filter, load to deck / queue), demo library fallback
-- [x] Connect real AzuraCast station (JRadio, 426 tracks)
-- [x] Go live to the VPS LiveKit bridge (password-protected), return audio from co-hosts
-- [ ] Add LiveKit API key + secret and studio password — waiting on Clifford (form was declined)
-- [ ] Confirm the LiveKit room name the station's mixer listens to (default "studio")
+- [x] Connect real AzuraCast station (JRadio)
+- [x] Go live straight to AzuraCast Web DJ (replaced the LiveKit bridge)
+- [x] Library: folder filter, tick boxes, select all, add whole folder to running order
+- [x] Auto DJ alternates into tracks loaded onto a deck by hand, not only from the running order

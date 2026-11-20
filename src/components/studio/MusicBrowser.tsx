@@ -1,6 +1,8 @@
-import { memo, useDeferredValue, useMemo, useState } from "react";
-import { AlertTriangle, ArrowUpDown, Library, Plus, Search } from "lucide-react";
+import { memo, useCallback, useDeferredValue, useMemo, useState } from "react";
+import { AlertTriangle, ArrowUpDown, ListPlus, Library, Plus, Search, X } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -9,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatTime } from "@/lib/studio-logic";
+import { formatTime, isInFolder, listFolders, sortByPath } from "@/lib/studio-logic";
 import type { DeckId, LibraryResponse, Track } from "@/lib/studio-types";
 import { cn } from "@/lib/utils";
 import { TrackArt } from "./TrackArt";
@@ -17,26 +19,43 @@ import { useStudio, useStudioActions } from "./studio-context";
 
 const MAX_ROWS = 300;
 type SortKey = "title" | "artist" | "album" | "duration";
+const ALL = "__all";
+const TOP = "__top";
+const folderLabel = (f: string) => (f === "" ? "Top level (no folder)" : f);
 
 const Row = memo(function Row({
   track,
   busyA,
   busyB,
+  selected,
   onLoad,
   onQueue,
+  onSelect,
 }: {
   track: Track;
   busyA: boolean;
   busyB: boolean;
+  selected: boolean;
   onLoad: (deck: DeckId, t: Track) => void;
   onQueue: (t: Track) => void;
+  onSelect: (id: string, on: boolean) => void;
 }) {
   return (
     <tr
-      className="group border-b border-border/50 hover:bg-panel-raised"
+      className={cn(
+        "group border-b border-border/50 hover:bg-panel-raised",
+        selected && "bg-primary/10",
+      )}
       onDoubleClick={() => onQueue(track)}
     >
-      <td className="py-1.5 pl-3 pr-2">
+      <td className="py-1.5 pl-3">
+        <Checkbox
+          checked={selected}
+          onCheckedChange={(v) => onSelect(track.id, v === true)}
+          aria-label={`Select ${track.title}`}
+        />
+      </td>
+      <td className="py-1.5 pr-2">
         <TrackArt track={track} className="h-8 w-8" />
       </td>
       <td className="max-w-0 py-1.5 pr-3">
@@ -103,9 +122,11 @@ const Row = memo(function Row({
 
 export function MusicBrowser({ library }: { library: LibraryResponse }) {
   const { decks } = useStudio();
-  const { loadTrack, addToQueue } = useStudioActions();
+  const { loadTrack, addToQueue, addManyToQueue } = useStudioActions();
   const [query, setQuery] = useState("");
   const [playlist, setPlaylist] = useState("all");
+  const [folder, setFolder] = useState(ALL);
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "artist", dir: 1 });
   const deferredQuery = useDeferredValue(query);
 
@@ -117,11 +138,15 @@ export function MusicBrowser({ library }: { library: LibraryResponse }) {
     [library.tracks],
   );
 
+  const folders = useMemo(() => listFolders(library.tracks.map((t) => t.path)), [library.tracks]);
+  const folderPath = folder === ALL ? null : folder === TOP ? "" : folder;
+
   const filtered = useMemo(() => {
     const q = deferredQuery.trim().toLowerCase();
     const terms = q ? q.split(/\s+/) : [];
     const list = library.tracks.filter((t) => {
       if (playlist !== "all" && !t.playlists.includes(playlist)) return false;
+      if (folderPath !== null && !isInFolder(t.path, folderPath)) return false;
       if (!terms.length) return true;
       const hay = `${t.title} ${t.artist} ${t.album} ${t.genre} ${t.path}`.toLowerCase();
       return terms.every((term) => hay.includes(term));
@@ -130,7 +155,46 @@ export function MusicBrowser({ library }: { library: LibraryResponse }) {
     return list.sort((a, b) =>
       key === "duration" ? (a.duration - b.duration) * dir : a[key].localeCompare(b[key]) * dir,
     );
-  }, [library.tracks, deferredQuery, playlist, sort]);
+  }, [library.tracks, deferredQuery, playlist, folderPath, sort]);
+
+  const folderTracks = useMemo(
+    () =>
+      folderPath === null
+        ? []
+        : sortByPath(library.tracks.filter((t) => isInFolder(t.path, folderPath))),
+    [library.tracks, folderPath],
+  );
+
+  const selectedInView = filtered.filter((t) => selected.has(t.id)).length;
+  const allChecked = filtered.length > 0 && selectedInView === filtered.length;
+  const headerChecked = allChecked ? true : selectedInView > 0 ? "indeterminate" : false;
+
+  const onSelect = useCallback((id: string, on: boolean) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
+
+  const toggleAll = () =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allChecked) filtered.forEach((t) => next.delete(t.id));
+      else filtered.forEach((t) => next.add(t.id));
+      return next;
+    });
+
+  const addSelected = () => {
+    // Keep the order the presenter sees in the list.
+    const picked = filtered.filter((t) => selected.has(t.id));
+    const hidden = library.tracks.filter(
+      (t) => selected.has(t.id) && !picked.some((p) => p.id === t.id),
+    );
+    addManyToQueue([...picked, ...hidden]);
+    setSelected(new Set());
+  };
 
   const toggleSort = (key: SortKey) =>
     setSort((s) => (s.key === key ? { key, dir: s.dir === 1 ? -1 : 1 } : { key, dir: 1 }));
@@ -192,10 +256,57 @@ export function MusicBrowser({ library }: { library: LibraryResponse }) {
             ))}
           </SelectContent>
         </Select>
+        <Select value={folder} onValueChange={setFolder}>
+          <SelectTrigger className="h-8 w-52 bg-groove" aria-label="Filter by folder">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>All folders</SelectItem>
+            {folders.map(({ folder: f, count }) => (
+              <SelectItem key={f || TOP} value={f === "" ? TOP : f}>
+                {`${folderLabel(f)} (${count})`}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <span className="text-xs tabular-nums text-muted-foreground">
           {filtered.length.toLocaleString()} of {library.tracks.length.toLocaleString()}
         </span>
       </header>
+
+      {(folderPath !== null || selected.size > 0) && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-border bg-panel-raised/60 px-3 py-2">
+          {folderPath !== null && (
+            <Button
+              size="sm"
+              onClick={() => addManyToQueue(folderTracks, `Folder: ${folderLabel(folderPath)}`)}
+              disabled={!folderTracks.length}
+            >
+              <ListPlus /> Add whole folder ({folderTracks.length})
+            </Button>
+          )}
+          {selected.size > 0 && (
+            <>
+              <Button size="sm" variant="secondary" onClick={addSelected}>
+                <Plus /> Add {selected.size} selected
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setSelected(new Set())}
+                aria-label="Clear selection"
+              >
+                <X /> Clear
+              </Button>
+            </>
+          )}
+          {folderPath !== null && (
+            <span className="text-xs text-muted-foreground">
+              Whole folder is added in file-name order, including sub-folders.
+            </span>
+          )}
+        </div>
+      )}
 
       {library.mode === "demo" && (
         <div className="flex items-start gap-2 border-b border-border bg-primary/10 px-3 py-2 text-xs text-foreground">
@@ -211,6 +322,7 @@ export function MusicBrowser({ library }: { library: LibraryResponse }) {
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="w-full table-fixed text-left">
           <colgroup>
+            <col className="w-9" />
             <col className="w-12" />
             <col />
             <col className="hidden md:table-column" />
@@ -221,7 +333,16 @@ export function MusicBrowser({ library }: { library: LibraryResponse }) {
           </colgroup>
           <thead className="sticky top-0 z-10 bg-panel">
             <tr className="border-b border-border">
-              <th className="py-2 pl-3" />
+              <th className="py-2 pl-3 text-left">
+                <Checkbox
+                  checked={headerChecked}
+                  onCheckedChange={toggleAll}
+                  disabled={!filtered.length}
+                  aria-label={`Select all ${filtered.length} tracks`}
+                  title="Select all tracks in this list"
+                />
+              </th>
+              <th className="py-2" />
               <SortHead k="title">Title</SortHead>
               <SortHead k="artist" className="hidden md:table-cell">
                 Artist
@@ -247,8 +368,10 @@ export function MusicBrowser({ library }: { library: LibraryResponse }) {
                 track={t}
                 busyA={decks.A.playing}
                 busyB={decks.B.playing}
+                selected={selected.has(t.id)}
                 onLoad={loadTrack}
                 onQueue={addToQueue}
+                onSelect={onSelect}
               />
             ))}
           </tbody>

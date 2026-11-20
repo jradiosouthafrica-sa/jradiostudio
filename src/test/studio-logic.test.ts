@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   crossfadeGains,
+  isInFolder,
+  listFolders,
   mapAzuraMedia,
   parseTrackId,
   pickAutoTransition,
   queueStartTimes,
+  sortByPath,
 } from "@/lib/studio-logic";
 
 describe("parseTrackId", () => {
@@ -34,16 +37,16 @@ describe("crossfadeGains", () => {
 });
 
 describe("pickAutoTransition", () => {
-  const idle = { playing: false, remaining: 0, hasTrack: false };
+  const idle = { playing: false, remaining: 0, hasTrack: false, cued: false };
   it("starts the next track on the free deck inside the 8 second window", () => {
     expect(
       pickAutoTransition({
         autoDj: true,
         transitioning: false,
         queueLength: 1,
-        decks: { A: { playing: true, remaining: 7.5, hasTrack: true }, B: idle },
+        decks: { A: { playing: true, remaining: 7.5, hasTrack: true, cued: false }, B: idle },
       }),
-    ).toEqual({ from: "A", to: "B" });
+    ).toEqual({ from: "A", to: "B", source: "queue" });
   });
   it("waits while more than 8 seconds remain", () => {
     expect(
@@ -51,14 +54,69 @@ describe("pickAutoTransition", () => {
         autoDj: true,
         transitioning: false,
         queueLength: 1,
-        decks: { A: { playing: true, remaining: 9, hasTrack: true }, B: idle },
+        decks: { A: { playing: true, remaining: 9, hasTrack: true, cued: false }, B: idle },
       }),
     ).toBeNull();
   });
   it("does nothing when Auto DJ is off or the queue is empty", () => {
-    const decks = { A: { playing: true, remaining: 2, hasTrack: true }, B: idle };
+    const decks = { A: { playing: true, remaining: 2, hasTrack: true, cued: false }, B: idle };
     expect(pickAutoTransition({ autoDj: false, transitioning: false, queueLength: 3, decks })).toBeNull();
     expect(pickAutoTransition({ autoDj: true, transitioning: false, queueLength: 0, decks })).toBeNull();
+  });
+});
+
+describe("pickAutoTransition with hand-loaded decks", () => {
+  const ending = { playing: true, remaining: 5, hasTrack: true, cued: false };
+  const cued = { playing: false, remaining: 200, hasTrack: true, cued: true };
+  it("crossfades into a track loaded by hand even when the running order is empty", () => {
+    expect(
+      pickAutoTransition({ autoDj: true, transitioning: false, queueLength: 0, decks: { A: ending, B: cued } }),
+    ).toEqual({ from: "A", to: "B", source: "deck" });
+  });
+  it("plays the hand-loaded track before the running order", () => {
+    expect(
+      pickAutoTransition({ autoDj: true, transitioning: false, queueLength: 4, decks: { A: cued, B: ending } }),
+    ).toEqual({ from: "B", to: "A", source: "deck" });
+  });
+  it("does not replay a track that already finished on the free deck", () => {
+    const finished = { playing: false, remaining: 0, hasTrack: true, cued: false };
+    expect(
+      pickAutoTransition({ autoDj: true, transitioning: false, queueLength: 0, decks: { A: ending, B: finished } }),
+    ).toBeNull();
+    expect(
+      pickAutoTransition({ autoDj: true, transitioning: false, queueLength: 1, decks: { A: ending, B: finished } }),
+    ).toEqual({ from: "A", to: "B", source: "queue" });
+  });
+});
+
+describe("folders", () => {
+  const paths = [
+    "presenters/weekend/02 b.mp3",
+    "presenters/weekend/01 a.mp3",
+    "presenters/anthony/x.mp3",
+    "jazz/y.mp3",
+    "top.mp3",
+  ];
+  it("counts parent folders with their sub-folders", () => {
+    expect(listFolders(paths)).toEqual([
+      { folder: "", count: 1 },
+      { folder: "jazz", count: 1 },
+      { folder: "presenters", count: 3 },
+      { folder: "presenters/anthony", count: 1 },
+      { folder: "presenters/weekend", count: 2 },
+    ]);
+  });
+  it("includes sub-folder tracks in a parent folder but not look-alike names", () => {
+    expect(isInFolder("presenters/weekend/a.mp3", "presenters")).toBe(true);
+    expect(isInFolder("presenters2/a.mp3", "presenters")).toBe(false);
+    expect(isInFolder("top.mp3", "")).toBe(true);
+    expect(isInFolder("jazz/y.mp3", "")).toBe(false);
+  });
+  it("adds a folder in file-name order", () => {
+    expect(sortByPath(paths.slice(0, 2).map((path) => ({ path }))).map((t) => t.path)).toEqual([
+      "presenters/weekend/01 a.mp3",
+      "presenters/weekend/02 b.mp3",
+    ]);
   });
 });
 

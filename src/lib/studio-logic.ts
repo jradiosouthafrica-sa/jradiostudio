@@ -32,12 +32,21 @@ export function otherDeck(deck: DeckId): DeckId {
   return deck === "A" ? "B" : "A";
 }
 
-export type DeckSnapshot = { playing: boolean; remaining: number; hasTrack: boolean };
+export type DeckSnapshot = {
+  playing: boolean;
+  remaining: number;
+  hasTrack: boolean;
+  /** A track is loaded, paused at (or near) its start and hasn't finished — ready to go. */
+  cued: boolean;
+};
+
+export type AutoTransition = { from: DeckId; to: DeckId; source: "deck" | "queue" };
 
 /**
- * Decides whether Auto DJ should start the next queued track now.
- * Fires when exactly one deck is playing, it is within the crossfade window,
- * the other deck is free, and something is queued.
+ * Decides whether Auto DJ should start the next track now.
+ * Fires when exactly one deck is playing and it is within the crossfade window.
+ * A track the presenter loaded by hand onto the free deck plays first ("deck");
+ * otherwise the next running-order track is loaded onto the free deck ("queue").
  */
 export function pickAutoTransition(input: {
   autoDj: boolean;
@@ -45,16 +54,19 @@ export function pickAutoTransition(input: {
   queueLength: number;
   decks: Record<DeckId, DeckSnapshot>;
   crossfadeSeconds?: number;
-}): { from: DeckId; to: DeckId } | null {
+}): AutoTransition | null {
   const window = input.crossfadeSeconds ?? AUTO_CROSSFADE_SECONDS;
-  if (!input.autoDj || input.transitioning || input.queueLength === 0) return null;
+  if (!input.autoDj || input.transitioning) return null;
   const { A, B } = input.decks;
   if (A.playing && B.playing) return null;
   const from: DeckId | null = A.playing ? "A" : B.playing ? "B" : null;
   if (!from) return null;
   const cur = input.decks[from];
   if (cur.remaining > window) return null;
-  return { from, to: otherDeck(from) };
+  const to = otherDeck(from);
+  if (input.decks[to].cued) return { from, to, source: "deck" };
+  if (input.queueLength > 0) return { from, to, source: "queue" };
+  return null;
 }
 
 export function formatTime(seconds: number): string {
@@ -80,8 +92,16 @@ function fileStem(path: string): string {
 export function mapAzuraMedia(raw: unknown): Track | null {
   if (!raw || typeof raw !== "object") return null;
   const m = raw as {
-    id?: unknown; path?: unknown; title?: unknown; artist?: unknown; album?: unknown;
-    genre?: unknown; length?: unknown; art?: unknown; links?: unknown; playlists?: unknown;
+    id?: unknown;
+    path?: unknown;
+    title?: unknown;
+    artist?: unknown;
+    album?: unknown;
+    genre?: unknown;
+    length?: unknown;
+    art?: unknown;
+    links?: unknown;
+    playlists?: unknown;
   };
   const id = typeof m.id === "number" ? m.id : Number(m.id);
   if (!Number.isSafeInteger(id) || id < 1) return null;
@@ -109,7 +129,11 @@ export function mapAzuraMedia(raw: unknown): Track | null {
 }
 
 /** Estimated on-air start time (ms epoch) for each queued track. */
-export function queueStartTimes(now: number, secondsUntilFree: number, durations: number[]): number[] {
+export function queueStartTimes(
+  now: number,
+  secondsUntilFree: number,
+  durations: number[],
+): number[] {
   const out: number[] = [];
   let t = now + Math.max(0, secondsUntilFree) * 1000;
   for (const d of durations) {
@@ -117,4 +141,44 @@ export function queueStartTimes(now: number, secondsUntilFree: number, durations
     t += Math.max(0, d - AUTO_CROSSFADE_SECONDS) * 1000;
   }
   return out;
+}
+
+/** The folder a library file sits in ("" for the top level). */
+export function trackFolder(path: string): string {
+  const i = path.lastIndexOf("/");
+  return i < 0 ? "" : path.slice(0, i);
+}
+
+/** True when the track is in the folder or any of its sub-folders. */
+export function isInFolder(path: string, folder: string): boolean {
+  const dir = trackFolder(path);
+  if (folder === "") return dir === "";
+  return dir === folder || dir.startsWith(`${folder}/`);
+}
+
+/** Every folder (including parent folders) with how many tracks it holds, sorted by name. */
+export function listFolders(paths: string[]): { folder: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const p of paths) {
+    const dir = trackFolder(p);
+    if (dir === "") {
+      counts.set("", (counts.get("") ?? 0) + 1);
+      continue;
+    }
+    const parts = dir.split("/");
+    for (let i = 1; i <= parts.length; i++) {
+      const f = parts.slice(0, i).join("/");
+      counts.set(f, (counts.get(f) ?? 0) + 1);
+    }
+  }
+  return Array.from(counts, ([folder, count]) => ({ folder, count })).sort((a, b) =>
+    a.folder.localeCompare(b.folder, undefined, { sensitivity: "base", numeric: true }),
+  );
+}
+
+/** Sorts tracks in file-name order, the way they sit in the folder. */
+export function sortByPath<T extends { path: string }>(tracks: T[]): T[] {
+  return [...tracks].sort((a, b) =>
+    a.path.localeCompare(b.path, undefined, { sensitivity: "base", numeric: true }),
+  );
 }
