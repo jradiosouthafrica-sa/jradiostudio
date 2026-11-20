@@ -46,7 +46,6 @@ export class AzuraWebcaster {
           mime,
           user: login.user,
           password: login.djPassword,
-          audio: { channels: 2, bitrate: 128, encoder: mime.includes("opus") ? "opus" : "unknown" },
         },
       }));
 
