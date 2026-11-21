@@ -14,7 +14,9 @@
     "test:watch": "vitest",
     "relay": "node server/icecast-relay.mjs"
   },
-  "overrides": { "rolldown": "1.2.1" },
+  "overrides": {
+    "rolldown": "1.2.1"
+  },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-accordion": "^1.2.12",
