@@ -53,7 +53,6 @@ From the existing project directory:
 ```sh
 cd /var/www/jradiostudio
 bun install
-` `` `sh
 ```
 
 Ensure FFmpeg is installed and supports libmp3lame:
