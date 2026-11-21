@@ -11,7 +11,14 @@ import {
 import { toast } from "sonner";
 
 import { StudioEngine, type MeterChannel } from "@/lib/audio-engine";
-import { AUTO_CROSSFADE_SECONDS, otherDeck, pickAutoTransition } from "@/lib/studio-logic";
+import {
+  AUTO_CROSSFADE_SECONDS,
+  CROSSFADER_CENTRE,
+  crossfaderLocked,
+  otherDeck,
+  pickAutoTransition,
+} from "@/lib/studio-logic";
+import { parseSavedStudio, STUDIO_STORAGE_KEY, type SavedStudio } from "@/lib/studio-persist";
 import type { DeckId, QueueItem, Track } from "@/lib/studio-types";
 
 export type DeckState = {
@@ -96,6 +103,9 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   const fadeRaf = useRef<number | null>(null);
   /** Guards the gap between Auto DJ firing and the next deck actually starting. */
   const pendingRef = useRef(false);
+  /** Saving waits until the last saved studio has been put back, so it is never overwritten. */
+  const restoredRef = useRef(false);
+  const lastSavedRef = useRef("");
 
   const patchDeck = useCallback((deck: DeckId, patch: Partial<DeckState>) => {
     setState((s) => ({ ...s, decks: { ...s.decks, [deck]: { ...s.decks[deck], ...patch } } }));
@@ -187,7 +197,11 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       pendingRef.current = true;
       void play(to).finally(() => {
         pendingRef.current = false;
-        if (engineRef.current && !engineRef.current.element(to).paused) {
+        if (
+          engineRef.current &&
+          !engineRef.current.element(to).paused &&
+          !crossfaderLocked(stateRef.current.decks)
+        ) {
           animateCrossfader(to === "A" ? -1 : 1, fadeSeconds);
         }
       });
@@ -244,6 +258,101 @@ export function StudioProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => () => stopFade(), []);
 
+  // "To end": glide the crossfader to the centre and hold it there until the song ends.
+  const locked = crossfaderLocked(state.decks);
+  useEffect(() => {
+    if (locked) animateCrossfader(CROSSFADER_CENTRE, 1.5);
+  }, [locked, animateCrossfader]);
+
+  // Put back the running order, decks and mixer from the last session on this device.
+  useEffect(() => {
+    let saved: SavedStudio | null = null;
+    try {
+      saved = parseSavedStudio(window.localStorage.getItem(STUDIO_STORAGE_KEY));
+    } catch {
+      saved = null;
+    }
+    if (saved) {
+      const s = saved;
+      setState((prev) => ({
+        ...prev,
+        queue: s.queue,
+        levels: s.levels,
+        crossfader: s.crossfader,
+        autoDj: s.autoDj,
+        duck: s.duck,
+      }));
+      stateRef.current = {
+        ...stateRef.current,
+        levels: s.levels,
+        crossfader: s.crossfader,
+        duck: s.duck,
+      };
+      (["A", "B"] as DeckId[]).forEach((deck) => {
+        const d = s.decks[deck];
+        if (!d) return;
+        loadTrack(deck, d.track);
+        const engine = engineRef.current;
+        if (engine && d.position > 0) {
+          engine
+            .element(deck)
+            .addEventListener("loadedmetadata", () => engine.seek(deck, d.position), {
+              once: true,
+            });
+        }
+      });
+    }
+    restoredRef.current = true;
+  }, [loadTrack]);
+
+  const saveNow = useCallback(() => {
+    if (!restoredRef.current) return;
+    const s = stateRef.current;
+    const engine = engineRef.current;
+    const deckSave = (deck: DeckId) => {
+      const track = s.decks[deck].track;
+      if (!track) return null;
+      const t = engine?.element(deck).currentTime ?? 0;
+      return { track, position: Math.round(t * 10) / 10 };
+    };
+    const data: SavedStudio = {
+      queue: s.queue,
+      decks: { A: deckSave("A"), B: deckSave("B") },
+      levels: s.levels,
+      crossfader: Math.round(s.crossfader * 1000) / 1000,
+      autoDj: s.autoDj,
+      duck: s.duck,
+    };
+    const json = JSON.stringify(data);
+    if (json === lastSavedRef.current) return;
+    try {
+      window.localStorage.setItem(STUDIO_STORAGE_KEY, json);
+      lastSavedRef.current = json;
+    } catch (err) {
+      console.error("Couldn't save the studio", err);
+    }
+  }, []);
+
+  // Save right away when the running order or decks change, every 2 seconds for the
+  // playhead, and when the app is closed or hidden.
+  useEffect(() => {
+    saveNow();
+  }, [saveNow, state.queue, state.decks, state.levels, state.autoDj, state.duck]);
+  useEffect(() => {
+    const id = window.setInterval(saveNow, 2000);
+    const onHide = () => saveNow();
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") saveNow();
+    };
+    window.addEventListener("pagehide", onHide);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener("pagehide", onHide);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [saveNow]);
+
   const actions = useMemo<StudioActions>(
     () => ({
       loadTrack,
@@ -287,6 +396,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
         else e.setChannelLevel(channel, value);
       },
       setCrossfader: (value) => {
+        if (crossfaderLocked(stateRef.current.decks)) return;
         stopFade();
         setState((s) => ({ ...s, crossfader: value, transitioning: false }));
         engineRef.current?.setCrossfader(value);

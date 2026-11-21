@@ -199,3 +199,11 @@ export function sortByPath<T extends { path: string }>(tracks: T[]): T[] {
     a.path.localeCompare(b.path, undefined, { sensitivity: "base", numeric: true }),
   );
 }
+
+/** Crossfader position used while a deck plays "To end": dead centre, both decks equal. */
+export const CROSSFADER_CENTRE = 0;
+
+/** While any deck is set to stop at the end, the crossfader is held in the centre. */
+export function crossfaderLocked(decks: Record<DeckId, { stopAtEnd: boolean }>): boolean {
+  return decks.A.stopAtEnd || decks.B.stopAtEnd;
+}

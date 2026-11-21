@@ -12,6 +12,7 @@ type FaderProps = {
   step?: number;
   className?: string;
   capClassName?: string;
+  disabled?: boolean;
 };
 
 /** Console-style fader: dark groove with a ribbed cap. */
@@ -25,6 +26,7 @@ export function Fader({
   step = 0.01,
   className,
   capClassName,
+  disabled = false,
 }: FaderProps) {
   const vertical = orientation === "vertical";
   return (
@@ -35,9 +37,10 @@ export function Fader({
       max={max}
       step={step}
       value={[value]}
+      disabled={disabled}
       onValueChange={(v) => onChange(v[0] ?? value)}
       className={cn(
-        "relative flex touch-none select-none items-center justify-center",
+        "relative flex touch-none select-none items-center justify-center data-[disabled]:cursor-not-allowed data-[disabled]:opacity-70",
         vertical ? "h-full w-9 flex-col" : "h-9 w-full",
         className,
       )}

@@ -3,6 +3,7 @@ import { Mic, MicOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import type { MeterChannel } from "@/lib/audio-engine";
+import { crossfaderLocked } from "@/lib/studio-logic";
 import { cn } from "@/lib/utils";
 import { Fader } from "./Fader";
 import { Meter } from "./Meter";
@@ -46,7 +47,8 @@ function Strip({
 }
 
 export function MixerPanel() {
-  const { crossfader, micOpen, duck, transitioning } = useStudio();
+  const { crossfader, micOpen, duck, transitioning, decks } = useStudio();
+  const locked = crossfaderLocked(decks);
   const { setCrossfader, toggleMic, setDuck } = useStudioActions();
 
   return (
@@ -89,7 +91,11 @@ export function MixerPanel() {
         <div className="flex items-center justify-between">
           <span className="console-label text-deck-a">A</span>
           <span className="console-label text-muted-foreground">
-            Crossfader{transitioning ? " · fading" : ""}
+            {locked ? (
+              <span className="text-on-air">Crossfader · locked centre</span>
+            ) : (
+              <>Crossfader{transitioning ? " · fading" : ""}</>
+            )}
           </span>
           <span className="console-label text-deck-b">B</span>
         </div>
@@ -100,6 +106,7 @@ export function MixerPanel() {
           max={1}
           value={crossfader}
           onChange={setCrossfader}
+          disabled={locked}
         />
       </div>
     </section>
