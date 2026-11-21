@@ -38,3 +38,5 @@ use the editor.
 
 - Studio audio runs in the browser (`src/lib/audio-engine.ts`, Web Audio); the mic feeds only the program bus, never the speakers, so `programStream` is the single feed sent to AzuraCast.
 - The on-air lamp turns live only after AzuraCast now-playing reports `is_live` (`getAzuraOnAir`), because an open WebSocket alone does not mean listeners hear the studio.
+- `AzuraWebcaster` reconnects on its own after a drop (backoff in `reconnectDelayMs`) and only `stop()` ends a broadcast, because presenters must never be silently dropped off air.
+- A deck's `stopAtEnd` flag blocks Auto DJ in `pickAutoTransition` and clears when the song ends, so "To end" applies to one song only.

@@ -41,24 +41,28 @@ export function Deck({ id }: { id: DeckId }) {
 
   const status = deck.error
     ? "Error"
-    : !deck.track
-      ? "Empty"
-      : deck.loading && !deck.playing
-        ? "Loading"
-        : deck.playing
-          ? onAir
-            ? "On air"
-            : "Playing · muted"
-          : current > 0.5
-            ? "Paused"
-            : "Cued";
+    : deck.playing && deck.stopAtEnd
+      ? onAir
+        ? "On air · stops at end"
+        : "Stops at end"
+      : !deck.track
+        ? "Empty"
+        : deck.loading && !deck.playing
+          ? "Loading"
+          : deck.playing
+            ? onAir
+              ? "On air"
+              : "Playing · muted"
+            : current > 0.5
+              ? "Paused"
+              : "Cued";
 
   return (
     <section
       aria-label={`Deck ${id}`}
       className="console-panel flex min-w-0 flex-col justify-between gap-3 p-3"
     >
-      <header className="flex items-center justify-between">
+      <header className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span
             className={cn(
@@ -71,17 +75,30 @@ export function Deck({ id }: { id: DeckId }) {
           </span>
           <span className="console-label text-muted-foreground">Deck {id}</span>
         </div>
-        <span
-          className={cn(
-            "console-label rounded-sm border px-2 py-0.5",
-            onAir
-              ? "border-on-air bg-on-air text-on-air-foreground"
-              : "border-border text-muted-foreground",
-            deck.error && "border-destructive text-destructive",
-          )}
-        >
-          {status}
-        </span>
+        <div className="flex items-center gap-1">
+          <span
+            className={cn(
+              "console-label rounded-sm border px-2 py-0.5",
+              onAir
+                ? "border-on-air bg-on-air text-on-air-foreground"
+                : "border-border text-muted-foreground",
+              deck.error && "border-destructive text-destructive",
+            )}
+          >
+            {status}
+          </span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            onClick={() => actions.eject(id)}
+            disabled={!deck.track || deck.playing}
+            aria-label={`Unload deck ${id}`}
+            title={deck.playing ? "Stop the deck before unloading" : "Unload track"}
+          >
+            <X />
+          </Button>
+        </div>
       </header>
 
       <div className="flex min-w-0 items-center gap-3">
@@ -144,7 +161,7 @@ export function Deck({ id }: { id: DeckId }) {
         })}
       </button>
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-1.5">
         <Button
           variant="secondary"
           size="sm"
@@ -159,7 +176,7 @@ export function Deck({ id }: { id: DeckId }) {
           onClick={() => actions.togglePlay(id)}
           disabled={!deck.track || !!deck.error}
           className={cn(
-            "min-w-24",
+            "min-w-20",
             accentBg,
             accentFg,
             "hover:opacity-90",
@@ -176,15 +193,33 @@ export function Deck({ id }: { id: DeckId }) {
           {deck.playing ? "Pause" : "Play"}
         </Button>
         <Button
-          variant="ghost"
           size="sm"
-          className="ml-auto"
-          onClick={() => actions.eject(id)}
-          disabled={!deck.track || deck.playing}
-          aria-label={`Unload deck ${id}`}
-          title={deck.playing ? "Stop the deck before unloading" : "Unload track"}
+          onClick={() => actions.playToEnd(id)}
+          disabled={!deck.track || !!deck.error}
+          aria-pressed={deck.stopAtEnd}
+          aria-label={`Play deck ${id} to the end and stop`}
+          title={
+            deck.stopAtEnd
+              ? "This song will stop at the end. Press again to cancel."
+              : deck.playing
+                ? "Stop this deck when the song ends (no switch to the other deck)"
+                : "Play this song and stop when it ends (no switch to the other deck)"
+          }
+          className={cn(
+            "gap-0.5",
+            deck.stopAtEnd
+              ? "bg-on-air text-on-air-foreground hover:bg-on-air/90"
+              : cn(
+                  accentBg,
+                  accentFg,
+                  "hover:opacity-90",
+                  id === "A" ? "hover:bg-deck-a" : "hover:bg-deck-b",
+                ),
+          )}
         >
-          <X /> Unload
+          <Pause className="size-3.5" />
+          <Play />
+          <span className="ml-1">To end</span>
         </Button>
       </div>
     </section>

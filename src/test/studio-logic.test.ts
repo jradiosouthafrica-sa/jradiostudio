@@ -7,6 +7,8 @@ import {
   mapAzuraMedia,
   parseTrackId,
   pickAutoTransition,
+  reconnectDelayMs,
+  shouldReconnect,
   queueStartTimes,
   sortByPath,
 } from "@/lib/studio-logic";
@@ -86,6 +88,36 @@ describe("pickAutoTransition with hand-loaded decks", () => {
     expect(
       pickAutoTransition({ autoDj: true, transitioning: false, queueLength: 1, decks: { A: ending, B: finished } }),
     ).toEqual({ from: "A", to: "B", source: "queue" });
+  });
+});
+
+describe("Play to end", () => {
+  const cued = { playing: false, remaining: 200, hasTrack: true, cued: true };
+  it("does not alternate to a hand-loaded deck when the playing deck is set to stop at the end", () => {
+    const ending = { playing: true, remaining: 3, hasTrack: true, cued: false, stopAtEnd: true };
+    expect(
+      pickAutoTransition({ autoDj: true, transitioning: false, queueLength: 0, decks: { A: ending, B: cued } }),
+    ).toBeNull();
+  });
+  it("does not start the next running-order track either", () => {
+    const ending = { playing: true, remaining: 3, hasTrack: true, cued: false, stopAtEnd: true };
+    const idle = { playing: false, remaining: 0, hasTrack: false, cued: false };
+    expect(
+      pickAutoTransition({ autoDj: true, transitioning: false, queueLength: 5, decks: { A: idle, B: ending } }),
+    ).toBeNull();
+  });
+});
+
+describe("reconnecting to AzuraCast", () => {
+  it("waits 1, 2, 4, 8 seconds, then every 10 seconds", () => {
+    expect([0, 1, 2, 3, 4, 5, 20].map(reconnectDelayMs)).toEqual([1000, 2000, 4000, 8000, 10000, 10000, 10000]);
+  });
+  it("keeps reconnecting forever once the broadcast has been live", () => {
+    expect(shouldReconnect(true, 500)).toBe(true);
+  });
+  it("gives up after 3 failed tries if it never got on air", () => {
+    expect(shouldReconnect(false, 2)).toBe(true);
+    expect(shouldReconnect(false, 3)).toBe(false);
   });
 });
 

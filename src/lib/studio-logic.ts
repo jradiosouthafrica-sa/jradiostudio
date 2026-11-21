@@ -38,6 +38,8 @@ export type DeckSnapshot = {
   hasTrack: boolean;
   /** A track is loaded, paused at (or near) its start and hasn't finished — ready to go. */
   cued: boolean;
+  /** Presenter pressed "Play to end": this deck finishes its song and stops, nothing follows. */
+  stopAtEnd?: boolean;
 };
 
 export type AutoTransition = { from: DeckId; to: DeckId; source: "deck" | "queue" };
@@ -62,11 +64,26 @@ export function pickAutoTransition(input: {
   const from: DeckId | null = A.playing ? "A" : B.playing ? "B" : null;
   if (!from) return null;
   const cur = input.decks[from];
+  if (cur.stopAtEnd) return null;
   if (cur.remaining > window) return null;
   const to = otherDeck(from);
   if (input.decks[to].cued) return { from, to, source: "deck" };
   if (input.queueLength > 0) return { from, to, source: "queue" };
   return null;
+}
+
+/** Wait before reconnecting to AzuraCast: 1s, 2s, 4s, 8s, then every 10s. */
+export function reconnectDelayMs(attempt: number): number {
+  const n = Math.max(0, Math.floor(attempt));
+  return Math.min(10_000, 1000 * 2 ** Math.min(n, 4));
+}
+
+/**
+ * Once a broadcast has been live, keep reconnecting until the presenter ends it.
+ * A first connection that never got through gives up after 3 tries (likely a wrong login).
+ */
+export function shouldReconnect(everLive: boolean, failedAttempts: number): boolean {
+  return everLive || failedAttempts < 3;
 }
 
 export function formatTime(seconds: number): string {

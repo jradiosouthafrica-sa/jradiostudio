@@ -20,6 +20,8 @@ export type DeckState = {
   loading: boolean;
   duration: number;
   error: string | null;
+  /** "Play to end" is on: the deck stops when its song ends and Auto DJ doesn't alternate. */
+  stopAtEnd: boolean;
 };
 
 export type LevelChannel = DeckId | "mic" | "master";
@@ -38,6 +40,8 @@ type StudioState = {
 type StudioActions = {
   loadTrack: (deck: DeckId, track: Track) => void;
   togglePlay: (deck: DeckId) => void;
+  /** Starts the deck (if stopped) and makes it stop at the end of the song; pressed again while playing, cancels. */
+  playToEnd: (deck: DeckId) => void;
   cue: (deck: DeckId) => void;
   eject: (deck: DeckId) => void;
   seek: (deck: DeckId, seconds: number) => void;
@@ -66,6 +70,7 @@ const emptyDeck: DeckState = {
   loading: false,
   duration: 0,
   error: null,
+  stopAtEnd: false,
 };
 
 const StateCtx = createContext<StudioState | null>(null);
@@ -110,7 +115,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       const el = engine.element(deck);
       el.addEventListener("play", () => patchDeck(deck, { playing: true }));
       el.addEventListener("pause", () => patchDeck(deck, { playing: false }));
-      el.addEventListener("ended", () => patchDeck(deck, { playing: false }));
+      el.addEventListener("ended", () => patchDeck(deck, { playing: false, stopAtEnd: false }));
       el.addEventListener("waiting", () => patchDeck(deck, { loading: true }));
       el.addEventListener("canplay", () => patchDeck(deck, { loading: false, error: null }));
       el.addEventListener("loadedmetadata", () => {
@@ -155,6 +160,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
         loading: true,
         duration: track.duration,
         error: null,
+        stopAtEnd: false,
       });
     },
     [ensureEngine, patchDeck],
@@ -219,6 +225,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
             el.paused &&
             !el.ended &&
             el.currentTime < 1,
+          stopAtEnd: s.decks[deck].stopAtEnd,
         };
       };
       const t = pickAutoTransition({
@@ -244,8 +251,22 @@ export function StudioProvider({ children }: { children: ReactNode }) {
         const engine = ensureEngine();
         const el = engine.element(deck);
         if (!stateRef.current.decks[deck].track) return;
-        if (el.paused) void play(deck);
-        else engine.pause(deck);
+        if (el.paused) {
+          patchDeck(deck, { stopAtEnd: false });
+          void play(deck);
+        } else engine.pause(deck);
+      },
+      playToEnd: (deck) => {
+        const engine = ensureEngine();
+        const el = engine.element(deck);
+        const d = stateRef.current.decks[deck];
+        if (!d.track || d.error) return;
+        if (el.paused || el.ended) {
+          patchDeck(deck, { stopAtEnd: true });
+          void play(deck);
+          return;
+        }
+        patchDeck(deck, { stopAtEnd: !d.stopAtEnd });
       },
       cue: (deck) => {
         const engine = ensureEngine();

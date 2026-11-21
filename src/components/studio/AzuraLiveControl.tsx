@@ -60,8 +60,14 @@ export function AzuraLiveControl() {
   // Send the audible deck's track to AzuraCast so the public player shows what's playing.
   const audible =
     decks.A.playing && decks.B.playing
-      ? crossfader <= 0 ? decks.A : decks.B
-      : decks.A.playing ? decks.A : decks.B.playing ? decks.B : null;
+      ? crossfader <= 0
+        ? decks.A
+        : decks.B
+      : decks.A.playing
+        ? decks.A
+        : decks.B.playing
+          ? decks.B
+          : null;
   const trackKey = audible?.track ? audible.track.id : null;
   useEffect(() => {
     if (status !== "live" || !audible?.track) return;
@@ -76,14 +82,25 @@ export function AzuraLiveControl() {
     try {
       const res = await getAzuraLiveLogin({ data: { password } });
       if (!res.ok) {
-        setError(res.reason === "wrong_password" ? "Wrong studio password." : "The AzuraCast DJ login hasn't been added yet.");
+        setError(
+          res.reason === "wrong_password"
+            ? "Wrong studio password."
+            : "The AzuraCast DJ login hasn't been added yet.",
+        );
         return;
       }
       const stream = await getProgramStream();
       const c = new AzuraWebcaster();
+      let prev: WebcasterStatus = "idle";
       c.onStatus = (s, msg) => {
-        setStatus(s);
         if (s === "error" && msg) toast.error(msg);
+        if (s === "reconnecting" && prev === "live")
+          toast.warning("Connection to AzuraCast dropped", {
+            description: "Reconnecting automatically — stay on this tab.",
+          });
+        if (s === "live" && prev === "reconnecting") toast.success("Reconnected to AzuraCast");
+        prev = s;
+        setStatus(s);
       };
       caster.current = c;
       c.start(stream, res);
@@ -101,12 +118,18 @@ export function AzuraLiveControl() {
 
   const onAir = status === "live" && confirmed;
   const lamp = onAir
-    ? micOpen ? "On air · mic live" : "On air"
+    ? micOpen
+      ? "On air · mic live"
+      : "On air"
     : status === "live"
       ? "Waiting for AzuraCast…"
-      : status === "connecting"
-        ? "Connecting…"
-        : micOpen ? "Mic open · off air" : "Off air";
+      : status === "reconnecting"
+        ? "Reconnecting…"
+        : status === "connecting"
+          ? "Connecting…"
+          : micOpen
+            ? "Mic open · off air"
+            : "Off air";
 
   return (
     <>
@@ -121,14 +144,36 @@ export function AzuraLiveControl() {
         )}
         aria-live="polite"
       >
-        <span className={cn("h-2 w-2 rounded-full", onAir ? "bg-on-air-foreground" : status === "live" ? "animate-pulse bg-on-air" : "bg-meter-off")} />
+        <span
+          className={cn(
+            "h-2 w-2 rounded-full",
+            onAir
+              ? "bg-on-air-foreground"
+              : status === "live" || status === "reconnecting"
+                ? "animate-pulse bg-on-air"
+                : "bg-meter-off",
+          )}
+        />
         {lamp}
-        {onAir && listeners !== null && <span className="font-mono text-xs normal-case tracking-normal">· {listeners} listening</span>}
+        {onAir && listeners !== null && (
+          <span className="font-mono text-xs normal-case tracking-normal">
+            · {listeners} listening
+          </span>
+        )}
       </div>
 
-      {status === "live" || status === "connecting" ? (
-        <Button size="sm" variant="secondary" onClick={stop} className="font-display uppercase tracking-widest">
-          {status === "connecting" ? <Loader2 className="animate-spin" /> : <Square className="fill-current" />}
+      {status === "live" || status === "connecting" || status === "reconnecting" ? (
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={stop}
+          className="font-display uppercase tracking-widest"
+        >
+          {status === "connecting" || status === "reconnecting" ? (
+            <Loader2 className="animate-spin" />
+          ) : (
+            <Square className="fill-current" />
+          )}
           End broadcast
         </Button>
       ) : (
@@ -147,12 +192,19 @@ export function AzuraLiveControl() {
             <DialogHeader>
               <DialogTitle>Go live on AzuraCast</DialogTitle>
               <DialogDescription>
-                Your decks and mic go straight to the station's listeners. Make sure BUTT or any other DJ app is closed, and keep this tab open while on air.
+                Your decks and mic go straight to the station's listeners. Make sure BUTT or any
+                other DJ app is closed, and keep this tab open while on air.
               </DialogDescription>
             </DialogHeader>
             <div className="my-4 space-y-2">
               <Label htmlFor="az-pw">Studio password</Label>
-              <Input id="az-pw" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoFocus />
+              <Input
+                id="az-pw"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoFocus
+              />
               {error && <p className="text-sm text-destructive">{error}</p>}
             </div>
             <DialogFooter>
