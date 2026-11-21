@@ -101,7 +101,7 @@ wss.on("connection", async (ws) => {
     const ffmpeg = spawn(process.env.FFMPEG_PATH || "ffmpeg", [
       "-hide_banner", "-loglevel", "warning", "-f", "webm", "-i", "pipe:0",
       "-vn", "-ac", "2", "-ar", "44100", "-c:a", "libmp3lame",
-      "-b:a", process.env.ICECAST_BITRATE || "128k", "-content_type", "audio/mpeg", "-f", "mp3", "pipe:1",
+      "-b:a", process.env.ICECAST_BITRATE || "128k", "-content_type", "audio/mpeg", "-f", "mp3", "-flush_packets", "1", "pipe:1",
     ], { stdio: ["pipe", "pipe", "pipe"] });
     session.ffmpeg = ffmpeg;
     ffmpeg.stdin.on("error", (error) => { if (!session.ended) end(`FFmpeg input error: ${error.message}`); });
