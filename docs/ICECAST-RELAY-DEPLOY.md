@@ -10,7 +10,7 @@ Before going live, obtain these exact values from AsuraHosting/AzuraCast support
 - Icecast SOURCE port (do not assume the WebDJ port is the SOURCE port)
 - Whether that SOURCE port uses TLS
 - Source mount path
-- Source username (usually `source`, but confirm)
+- Source username (usually `source`, but confirm; if AsuraHosting gives you `cn007`, set `ICECAST_SOURCE_USER=cn007`)
 - Source password (the Icecast source password, not automatically the WebDJ DJ password)
 
 The existing AzuraCast WebDJ port 8275 is not proof that port 8275 accepts Icecast SOURCE. Do not guess the port or mount.
@@ -118,6 +118,7 @@ location = /broadcast-ws {
     proxy_read_timeout 3600s;
     proxy_send_timeout 3600s;
     proxy_buffering off;
+    access_log off; # the WebSocket URL carries a short-lived token
 }
 ```
 
