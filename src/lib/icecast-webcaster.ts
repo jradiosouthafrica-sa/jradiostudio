@@ -5,12 +5,13 @@ export class IcecastWebcaster {
   onStatus: (status: WebcasterStatus, message?: string) => void = () => {};
   start(stream: MediaStream, token: string) {
     this.stop();
-    const mime = ["audio/webm;codecs=opus", "audio/ogg;codecs=opus", "audio/webm"].find((m) => MediaRecorder.isTypeSupported(m));
+    const mime = ["audio/webm;codecs=opus", "audio/webm"].find((m) => MediaRecorder.isTypeSupported(m));
     if (!mime) { this.onStatus("error", "This browser cannot encode audio. Please use Chrome or Edge."); return; }
     this.onStatus("connecting");
     const scheme = location.protocol === "https:" ? "wss:" : "ws:";
     const ws = new WebSocket(`${scheme}//${location.host}/broadcast-ws?token=${encodeURIComponent(token)}`);
     ws.binaryType = "arraybuffer"; this.ws = ws;
+    let sendQueue = Promise.resolve();
     ws.onmessage = (event) => {
       let msg: { type?: string; message?: string };
       try { msg = JSON.parse(String(event.data)) as typeof msg; } catch { return; }
@@ -19,7 +20,10 @@ export class IcecastWebcaster {
         recorder.ondataavailable = async (event) => {
           if (!event.data.size || ws.readyState !== WebSocket.OPEN) return;
           if (ws.bufferedAmount > 2_000_000) { this.onStatus("error", "Network cannot keep up with live audio."); this.stop(); return; }
-          ws.send(await event.data.arrayBuffer());
+          const blob = event.data;
+          sendQueue = sendQueue.then(async () => {
+            if (ws.readyState === WebSocket.OPEN) ws.send(await blob.arrayBuffer());
+          }).catch((error) => { console.error(error); this.onStatus("error", "Could not send audio to the VPS."); this.stop(); });
         };
         recorder.onerror = () => this.onStatus("error", "Browser audio encoder failed.");
         recorder.start(250); this.recorder = recorder; this.onStatus("live");
