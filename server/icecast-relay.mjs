@@ -103,6 +103,7 @@ wss.on("connection", async (ws) => {
       "-b:a", process.env.ICECAST_BITRATE || "128k", "-content_type", "audio/mpeg", "-f", "mp3", "pipe:1",
     ], { stdio: ["pipe", "pipe", "pipe"] });
     session.ffmpeg = ffmpeg;
+    ffmpeg.stdin.on("error", (error) => { if (!session.ended) end(`FFmpeg input error: ${error.message}`); });
     ffmpeg.stderr.on("data", (chunk) => console.error("[ffmpeg]", chunk.toString().trim()));
     ffmpeg.on("error", (error) => end(`FFmpeg error: ${error.message}`));
     ffmpeg.on("close", (code) => { if (!session.ended && code !== 0) end(`FFmpeg exited with code ${code}`); });
