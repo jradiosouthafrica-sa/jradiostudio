@@ -29,6 +29,7 @@ function validToken(token) {
 function openIcecastSocket() {
   const host = required("ICECAST_HOST");
   const port = Number(required("ICECAST_PORT"));
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("ICECAST_PORT must be a valid TCP port");
   return (process.env.ICECAST_TLS || "true").toLowerCase() !== "false"
     ? tls.connect({ host, port, servername: host, rejectUnauthorized: true })
     : net.connect({ host, port });
