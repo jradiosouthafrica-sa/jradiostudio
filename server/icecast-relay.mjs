@@ -41,6 +41,7 @@ function startIcecastSource() {
   const host = required("ICECAST_HOST");
   const port = Number(required("ICECAST_PORT"));
   const socket = openIcecastSocket();
+  const connectEvent = (process.env.ICECAST_TLS || "true").toLowerCase() !== "false" ? "secureConnect" : "connect";
   const authorization = Buffer.from(`${username}:${password}`).toString("base64");
   const request = [
     `SOURCE ${mount} ICE/1.0`, `Host: ${host}:${port}`,
@@ -57,7 +58,7 @@ function startIcecastSource() {
       settled = true; clearTimeout(timer); socket.destroy(); reject(error);
     };
     socket.once("error", fail);
-    socket.once("connect", () => socket.write(request));
+    socket.once(connectEvent, () => socket.write(request));
     socket.on("data", function handshake(data) {
       response = Buffer.concat([response, data]);
       const end = response.indexOf("\r\n\r\n");
