@@ -13,7 +13,7 @@ Before going live, obtain these exact values from AsuraHosting/AzuraCast support
 - Source username (usually `source`, but confirm; if AsuraHosting gives you `cn007`, set `ICECAST_SOURCE_USER=cn007`)
 - Source password (the Icecast source password, not automatically the WebDJ DJ password)
 
-The existing AzuraCast WebDJ port 8275 is not proof that port 8275 accepts Icecast SOURCE. Do not guess the port or mount.
+Port 8275 is the port already used for your AzuraCast live broadcast. This relay will test the Icecast SOURCE handshake on 8275 rather than asking you to obtain a different port. A successful WebDJ websocket login is not itself proof that the same port accepts SOURCE protocol, so the relay handshake result is the deciding test. Keep the station mount path in ICECAST_MOUNT exactly as configured by your AzuraCast provider; do not assume `/` or `/live`.
 
 ## VPS environment
 
@@ -24,9 +24,9 @@ STUDIO_PASSWORD=REPLACE_WITH_A_LONG_STUDIO_PASSWORD
 BROADCAST_TOKEN_SECRET=REPLACE_WITH_OUTPUT_OF_OPENSSL_RAND_HEX_32
 
 ICECAST_HOST=a6.asurahosting.com
-ICECAST_PORT=REPLACE_WITH_CONFIRMED_SOURCE_PORT
+ICECAST_PORT=8275
 ICECAST_MOUNT=/REPLACE_WITH_CONFIRMED_MOUNT
-ICECAST_SOURCE_USER=source
+ICECAST_SOURCE_USER=cn007
 ICECAST_SOURCE_PASSWORD=REPLACE_WITH_CONFIRMED_SOURCE_PASSWORD
 ICECAST_TLS=true
 ICECAST_BITRATE=128k
@@ -36,7 +36,7 @@ BROADCAST_ALLOWED_ORIGIN=https://studio.jradiosouthafrica.co.za
 FFMPEG_PATH=/usr/bin/ffmpeg
 ```
 
-Set `ICECAST_TLS=false` only if the provider confirms the source port is plain TCP. Use the exact mount path supplied by the provider. Keep this file private (mode 600); never commit it.
+Start with `ICECAST_TLS=true` on port 8275. If the SOURCE handshake reports a TLS/protocol failure, test `ICECAST_TLS=false` on the same port before changing ports. Use the exact mount path supplied by the provider. Keep this file private (mode 600); never commit it.
 
 Generate a token secret on the VPS with:
 
