@@ -37,8 +37,9 @@ function openIcecastSocket() {
 function startIcecastSource() {
   const mount = required("ICECAST_MOUNT");
   if (!mount.startsWith("/") || /[\r\n ]/.test(mount)) throw new Error("ICECAST_MOUNT must be a valid path beginning with /");
-  const username = (process.env.ICECAST_SOURCE_USER || "source").trim();
-  const password = required("ICECAST_SOURCE_PASSWORD");
+  const username = (process.env.ICECAST_SOURCE_USER || process.env.AZURACAST_DJ_USER || "source").trim();
+  const password = (process.env.ICECAST_SOURCE_PASSWORD || process.env.AZURACAST_DJ_PASSWORD || "").trim();
+  if (!password) throw new Error("Missing ICECAST_SOURCE_PASSWORD (or existing AZURACAST_DJ_PASSWORD)");
   const host = required("ICECAST_HOST");
   const port = Number(required("ICECAST_PORT"));
   const socket = openIcecastSocket();
