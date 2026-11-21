@@ -14,8 +14,9 @@ export const getIcecastBroadcastToken = createServerFn({ method: "POST" })
     const sourceHost = (process.env["ICECAST_HOST"] ?? "").trim();
     const sourcePassword = process.env["ICECAST_SOURCE_PASSWORD"] ?? "";
     const sourcePort = (process.env["ICECAST_PORT"] ?? "").trim();
+    const mount = (process.env["ICECAST_MOUNT"] ?? "").trim();
     const tokenSecret = process.env["BROADCAST_TOKEN_SECRET"] || studioPassword;
-    if (!studioPassword || !sourceHost || !sourcePassword || !sourcePort || !tokenSecret)
+    if (!studioPassword || !sourceHost || !sourcePassword || !sourcePort || !mount.startsWith("/") || !tokenSecret)
       return { ok: false, reason: "not_configured" };
     if (!passwordMatches(data.password, studioPassword)) {
       await new Promise((resolve) => setTimeout(resolve, 600));
