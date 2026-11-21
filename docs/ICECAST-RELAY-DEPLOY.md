@@ -26,8 +26,12 @@ BROADCAST_TOKEN_SECRET=REPLACE_WITH_OUTPUT_OF_OPENSSL_RAND_HEX_32
 ICECAST_HOST=a6.asurahosting.com
 ICECAST_PORT=8275
 ICECAST_MOUNT=/REPLACE_WITH_CONFIRMED_MOUNT
-ICECAST_SOURCE_USER=cn007
-ICECAST_SOURCE_PASSWORD=REPLACE_WITH_CONFIRMED_SOURCE_PASSWORD
+# Reuse the DJ login already configured for AirDesk; the relay falls back to these:
+AZURACAST_DJ_USER=cn007
+# Keep the existing AZURACAST_DJ_PASSWORD value in the private env file.
+# Optional explicit overrides, only if the provider gives different SOURCE credentials:
+# ICECAST_SOURCE_USER=cn007
+# ICECAST_SOURCE_PASSWORD=...
 ICECAST_TLS=true
 ICECAST_BITRATE=128k
 
