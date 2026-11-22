@@ -86,6 +86,21 @@ export function shouldReconnect(everLive: boolean, failedAttempts: number): bool
   return everLive || failedAttempts < 3;
 }
 
+export type LiveRoute = "encoder" | "direct";
+
+/** Accepts only a ws:// or wss:// address for the VPS encoder; anything else means "not set up". */
+export function encoderUrl(raw: string | undefined): string | null {
+  const v = (raw ?? "").trim();
+  return /^wss?:\/\/[^\s/]+/i.test(v) ? v : null;
+}
+
+/** Where the browser streams for each Go Live route: the VPS Icecast encoder or AzuraCast's own Web DJ. */
+export function liveUrl(route: LiveRoute, opts: { encoder: string | null; azuraBase: string; shortcode: string }): string | null {
+  if (route === "encoder") return opts.encoder;
+  const base = opts.azuraBase.trim().replace(/\/+$/, "");
+  return base ? base.replace(/^http/, "ws") + `/webdj/${opts.shortcode}/` : null;
+}
+
 export function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return "--:--";
   const s = Math.floor(seconds);

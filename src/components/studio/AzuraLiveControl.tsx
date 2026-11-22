@@ -13,10 +13,14 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { AzuraWebcaster, type WebcasterStatus } from "@/lib/azura-webcaster";
-import { getAzuraLiveLogin, getAzuraOnAir } from "@/lib/broadcast.functions";
+import { getAzuraLiveLogin, getAzuraOnAir, getLiveRoutes } from "@/lib/broadcast.functions";
+import type { LiveRoute } from "@/lib/studio-logic";
 import { cn } from "@/lib/utils";
 import { useStudio, useStudioActions } from "./studio-context";
+
+const ROUTE_KEY = "airdesk.liveRoute";
 
 /** Single on-air control: streams the studio mix to AzuraCast and confirms with AzuraCast that it's live. */
 export function AzuraLiveControl() {
@@ -30,8 +34,30 @@ export function AzuraLiveControl() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [encoderReady, setEncoderReady] = useState(false);
+  const [route, setRoute] = useState<LiveRoute>("encoder");
+  const [activeRoute, setActiveRoute] = useState<LiveRoute | null>(null);
 
   useEffect(() => () => caster.current?.stop(), []);
+
+  // When the Go Live window opens, check whether the VPS encoder is set up and recall the last choice.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    getLiveRoutes()
+      .then((r) => {
+        if (cancelled) return;
+        setEncoderReady(r.encoder);
+        const saved = window.localStorage.getItem(ROUTE_KEY);
+        setRoute(!r.encoder ? "direct" : saved === "direct" ? "direct" : "encoder");
+      })
+      .catch(() => {
+        if (!cancelled) setRoute("direct");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   // Poll AzuraCast while connected: only call it "on air" once AzuraCast itself reports a live DJ.
   useEffect(() => {
@@ -80,25 +106,29 @@ export function AzuraLiveControl() {
     setError(null);
     setBusy(true);
     try {
-      const res = await getAzuraLiveLogin({ data: { password } });
+      const res = await getAzuraLiveLogin({ data: { password, route } });
       if (!res.ok) {
         setError(
           res.reason === "wrong_password"
             ? "Wrong studio password."
-            : "The AzuraCast DJ login hasn't been added yet.",
+            : res.reason === "encoder_not_configured"
+              ? "The VPS encoder isn't set up on this server yet — choose Direct."
+              : "The AzuraCast DJ login hasn't been added yet.",
         );
         return;
       }
+      window.localStorage.setItem(ROUTE_KEY, route);
+      setActiveRoute(res.route);
       const stream = await getProgramStream();
       const c = new AzuraWebcaster();
       let prev: WebcasterStatus = "idle";
       c.onStatus = (s, msg) => {
         if (s === "error" && msg) toast.error(msg);
         if (s === "reconnecting" && prev === "live")
-          toast.warning("Connection to AzuraCast dropped", {
+          toast.warning(res.route === "encoder" ? "Connection to the encoder dropped" : "Connection to AzuraCast dropped", {
             description: "Reconnecting automatically — stay on this tab.",
           });
-        if (s === "live" && prev === "reconnecting") toast.success("Reconnected to AzuraCast");
+        if (s === "live" && prev === "reconnecting") toast.success("Reconnected");
         prev = s;
         setStatus(s);
       };
@@ -155,6 +185,11 @@ export function AzuraLiveControl() {
           )}
         />
         {lamp}
+        {status !== "idle" && status !== "error" && activeRoute && (
+          <span className="font-mono text-[10px] normal-case tracking-normal opacity-80">
+            {activeRoute === "encoder" ? "· Icecast" : "· Web DJ"}
+          </span>
+        )}
         {onAir && listeners !== null && (
           <span className="font-mono text-xs normal-case tracking-normal">
             · {listeners} listening
@@ -192,10 +227,50 @@ export function AzuraLiveControl() {
             <DialogHeader>
               <DialogTitle>Go live on AzuraCast</DialogTitle>
               <DialogDescription>
-                Your decks and mic go straight to the station's listeners. Make sure BUTT or any
-                other DJ app is closed, and keep this tab open while on air.
+                Your decks and mic go to the station's listeners. Make sure BUTT or any other DJ app
+                is closed, and keep this tab open while on air.
               </DialogDescription>
             </DialogHeader>
+            <RadioGroup
+              value={route}
+              onValueChange={(v) => setRoute(v as LiveRoute)}
+              className="mt-4"
+              aria-label="How to send the studio"
+            >
+              <Label
+                htmlFor="route-encoder"
+                className={cn(
+                  "flex cursor-pointer items-start gap-3 rounded-md border p-3",
+                  route === "encoder" ? "border-primary" : "border-border",
+                  !encoderReady && "cursor-not-allowed opacity-50",
+                )}
+              >
+                <RadioGroupItem id="route-encoder" value="encoder" disabled={!encoderReady} className="mt-0.5" />
+                <span className="space-y-1">
+                  <span className="block font-semibold">VPS encoder (Icecast)</span>
+                  <span className="block text-xs font-normal text-muted-foreground">
+                    {encoderReady
+                      ? "Your server encodes MP3 and logs in to AzuraCast like BUTT — fastest takeover."
+                      : "Not set up on this server yet."}
+                  </span>
+                </span>
+              </Label>
+              <Label
+                htmlFor="route-direct"
+                className={cn(
+                  "flex cursor-pointer items-start gap-3 rounded-md border p-3",
+                  route === "direct" ? "border-primary" : "border-border",
+                )}
+              >
+                <RadioGroupItem id="route-direct" value="direct" className="mt-0.5" />
+                <span className="space-y-1">
+                  <span className="block font-semibold">Direct (AzuraCast Web DJ)</span>
+                  <span className="block text-xs font-normal text-muted-foreground">
+                    Streams straight to AzuraCast. Use this if the encoder is down.
+                  </span>
+                </span>
+              </Label>
+            </RadioGroup>
             <div className="my-4 space-y-2">
               <Label htmlFor="az-pw">Studio password</Label>
               <Input

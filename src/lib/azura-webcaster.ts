@@ -26,6 +26,8 @@ export class AzuraWebcaster {
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private stableTimer: ReturnType<typeof setTimeout> | null = null;
   private lastMeta: { title: string; artist: string } | null = null;
+  /** Last reason the server gave before closing (sent by the VPS encoder). */
+  private serverError: string | null = null;
   onStatus: (s: WebcasterStatus, msg?: string) => void = () => {};
 
   private readonly onOnline = () => {
@@ -51,6 +53,7 @@ export class AzuraWebcaster {
     this.active = true;
     this.everLive = false;
     this.failures = 0;
+    this.serverError = null;
     window.addEventListener("online", this.onOnline);
     this.onStatus("connecting");
     this.connect();
@@ -90,6 +93,15 @@ export class AzuraWebcaster {
       }, STABLE_MS);
       this.onStatus("live");
     };
+    ws.onmessage = (e) => {
+      if (typeof e.data !== "string") return;
+      try {
+        const msg = JSON.parse(e.data) as { type?: string; data?: { message?: string } };
+        if (msg.type === "error" && msg.data?.message) this.serverError = msg.data.message;
+      } catch {
+        /* not JSON */
+      }
+    };
     ws.onclose = () => {
       if (this.ws !== ws) return;
       this.handleDrop();
@@ -115,7 +127,8 @@ export class AzuraWebcaster {
       this.teardown();
       this.onStatus(
         "error",
-        "AzuraCast refused the connection — check the DJ login, or close BUTT / other DJ apps.",
+        this.serverError ??
+          "AzuraCast refused the connection — check the DJ login, or close BUTT / other DJ apps.",
       );
       return;
     }

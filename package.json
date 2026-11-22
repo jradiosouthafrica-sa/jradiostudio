@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "encoder": "node --env-file=.env relay/icecast-relay.mjs"
   },
   "overrides": {
     "rolldown": "1.2.1"
@@ -68,6 +69,7 @@
     "tw-animate-css": "^1.3.4",
     "vaul": "^1.1.2",
     "vite-tsconfig-paths": "^6.0.2",
+    "ws": "^8",
     "zod": "^3.25.76"
   },
   "devDependencies": {
